@@ -45,6 +45,8 @@ type viewData struct {
 	Detail            *AgentDetail
 	Message           string
 	Error             string
+	ShowAgentCreate   bool
+	ShowAccountCreate bool
 	Binding           *ChannelBinding
 	ChannelBindingURL string
 	QRDataURI         string
@@ -211,6 +213,7 @@ func (s *Server) handleAgentsPage(w http.ResponseWriter, r *http.Request) {
 		PageInfo:         pageInfo,
 		Message:          r.URL.Query().Get("message"),
 		Error:            r.URL.Query().Get("error"),
+		ShowAgentCreate:  r.URL.Query().Get("create") == "1",
 	})
 }
 
@@ -242,6 +245,7 @@ func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
 		PageInfo:         pageInfo,
 		Message:          r.URL.Query().Get("message"),
 		Error:            r.URL.Query().Get("error"),
+		ShowAccountCreate: r.URL.Query().Get("create") == "1",
 	})
 }
 
@@ -255,7 +259,7 @@ func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/ai/accounts?error=表单解析失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?create=1&error=表单解析失败", http.StatusSeeOther)
 		return
 	}
 	provider := strings.TrimSpace(r.FormValue("provider"))
@@ -265,7 +269,7 @@ func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	apiType := strings.TrimSpace(r.FormValue("api_type"))
 	remark := strings.TrimSpace(r.FormValue("remark"))
 	if _, err := s.store.CreateAccount(user.ID, provider, name, apiKey, baseURL, apiType, remark); err != nil {
-		http.Redirect(w, r, "/ai/accounts?error=创建模型账号失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?create=1&error=创建模型账号失败", http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/ai/accounts?message=模型账号已创建", http.StatusSeeOther)
@@ -340,7 +344,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if selected == nil {
-		http.Redirect(w, r, "/ai/agents?error=请选择账号下的有效模型", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?create=1&error=请选择账号下的有效模型", http.StatusSeeOther)
 		return
 	}
 	webUIPort, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("web_ui_port")))
@@ -382,10 +386,10 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, ErrDockerUnavailable) {
-			http.Redirect(w, r, "/ai/agents?error=Docker%20不可用，请先启动%20Docker%20daemon", http.StatusSeeOther)
+			http.Redirect(w, r, "/ai/agents?create=1&error=Docker%20不可用，请先启动%20Docker%20daemon", http.StatusSeeOther)
 			return
 		}
-		http.Redirect(w, r, "/ai/agents?error="+template.URLQueryEscaper(err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?create=1&error="+template.URLQueryEscaper(err.Error()), http.StatusSeeOther)
 		return
 	}
 

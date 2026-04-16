@@ -30,6 +30,7 @@
             <p>对齐 1Panel 的模型账号页和模型池视图。</p>
           </div>
           <div class="header-actions">
+            <a class="button" href="/ai/accounts?create=1">创建模型账号</a>
             <span class="user-badge">{{.CurrentUser.Email}}</span>
             <form method="post" action="/logout">
               <button class="button button-ghost" type="submit">退出</button>
@@ -40,13 +41,83 @@
         {{if .Message}}<div class="alert success">{{.Message}}</div>{{end}}
         {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
 
-        <section class="page-grid">
-          <div class="card form-card">
+        <section class="page-grid single">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>模型账号列表</h2>
+                <p>保持 1Panel 的表格信息结构。</p>
+              </div>
+              <form method="get" action="/ai/accounts" class="toolbar-search">
+                <input type="text" name="q" value="{{.Query}}" placeholder="搜索名称、Provider、备注、Base URL" />
+                <button class="button button-ghost" type="submit">搜索</button>
+              </form>
+            </div>
+            <table class="panel-table">
+              <thead>
+	                <tr>
+	                  <th>名称</th>
+	                  <th>Provider</th>
+	                  <th>Base URL</th>
+	                  <th>API Type</th>
+	                  <th>校验</th>
+	                  <th>模型数</th>
+	                  <th>操作</th>
+	                </tr>
+              </thead>
+              <tbody>
+                {{if .Accounts}}
+                  {{range .Accounts}}
+                  <tr>
+                    <td>
+                      <div class="table-primary">{{.Name}}</div>
+                      <div class="table-sub">{{.Remark}}</div>
+                    </td>
+                    <td>{{.Provider}}</td>
+                    <td class="mono">{{.BaseURL}}</td>
+                    <td>{{.APIType}}</td>
+                    <td><span class="status {{if .Verified}}green{{else}}gray{{end}}">{{if .Verified}}已校验{{else}}未校验{{end}}</span></td>
+	                    <td>{{len .Models}}</td>
+	                    <td>
+	                      <details class="more-menu">
+	                        <summary class="button button-ghost button-small">更多</summary>
+	                        <div class="more-menu-panel">
+	                          <a class="more-menu-item" href="#model-pool">查看模型池</a>
+	                          <a class="more-menu-item" href="/ai/agents?create=1">创建智能体</a>
+	                        </div>
+	                      </details>
+	                    </td>
+	                  </tr>
+                  {{end}}
+                {{else}}
+                  <tr>
+	                    <td colspan="7" class="empty-row">还没有模型账号</td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+            <div class="pagination">
+              <span class="pagination-meta">共 {{.PageInfo.Total}} 条，第 {{.PageInfo.Page}} / {{.PageInfo.TotalPages}} 页</span>
+              <div class="pagination-links">
+                {{if .PageInfo.PrevURL}}<a href="{{.PageInfo.PrevURL}}">上一页</a>{{end}}
+                {{range .PageInfo.Pages}}
+                <a class="{{if .Active}}active{{end}}" href="{{.URL}}">{{.Number}}</a>
+                {{end}}
+                {{if .PageInfo.NextURL}}<a href="{{.PageInfo.NextURL}}">下一页</a>{{end}}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {{if .ShowAccountCreate}}
+        <div class="modal-overlay">
+          <div class="modal-card">
             <div class="card-header">
               <div>
                 <h2>创建模型账号</h2>
                 <p>对应 1Panel AgentAccount。</p>
               </div>
+              <a class="button button-ghost" href="/ai/accounts{{if .Query}}?q={{.Query}}{{end}}">关闭</a>
             </div>
             <form method="post" action="/ai/accounts/create" class="form-grid">
               <label>
@@ -79,70 +150,16 @@
                 <input type="text" name="remark" />
               </label>
               <div class="form-actions span-2">
+                <a class="button button-ghost" href="/ai/accounts{{if .Query}}?q={{.Query}}{{end}}">取消</a>
                 <button class="button" type="submit">创建模型账号</button>
               </div>
             </form>
           </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h2>模型账号列表</h2>
-                <p>保持 1Panel 的表格信息结构。</p>
-              </div>
-              <form method="get" action="/ai/accounts" class="toolbar-search">
-                <input type="text" name="q" value="{{.Query}}" placeholder="搜索名称、Provider、备注、Base URL" />
-                <button class="button button-ghost" type="submit">搜索</button>
-              </form>
-            </div>
-            <table class="panel-table">
-              <thead>
-                <tr>
-                  <th>名称</th>
-                  <th>Provider</th>
-                  <th>Base URL</th>
-                  <th>API Type</th>
-                  <th>校验</th>
-                  <th>模型数</th>
-                </tr>
-              </thead>
-              <tbody>
-                {{if .Accounts}}
-                  {{range .Accounts}}
-                  <tr>
-                    <td>
-                      <div class="table-primary">{{.Name}}</div>
-                      <div class="table-sub">{{.Remark}}</div>
-                    </td>
-                    <td>{{.Provider}}</td>
-                    <td class="mono">{{.BaseURL}}</td>
-                    <td>{{.APIType}}</td>
-                    <td><span class="status {{if .Verified}}green{{else}}gray{{end}}">{{if .Verified}}已校验{{else}}未校验{{end}}</span></td>
-                    <td>{{len .Models}}</td>
-                  </tr>
-                  {{end}}
-                {{else}}
-                  <tr>
-                    <td colspan="6" class="empty-row">还没有模型账号</td>
-                  </tr>
-                {{end}}
-              </tbody>
-            </table>
-            <div class="pagination">
-              <span class="pagination-meta">共 {{.PageInfo.Total}} 条，第 {{.PageInfo.Page}} / {{.PageInfo.TotalPages}} 页</span>
-              <div class="pagination-links">
-                {{if .PageInfo.PrevURL}}<a href="{{.PageInfo.PrevURL}}">上一页</a>{{end}}
-                {{range .PageInfo.Pages}}
-                <a class="{{if .Active}}active{{end}}" href="{{.URL}}">{{.Number}}</a>
-                {{end}}
-                {{if .PageInfo.NextURL}}<a href="{{.PageInfo.NextURL}}">下一页</a>{{end}}
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
+        {{end}}
 
         <section class="page-grid single">
-          <div class="card">
+          <div class="card" id="model-pool">
             <div class="card-header">
               <div>
                 <h2>模型池</h2>

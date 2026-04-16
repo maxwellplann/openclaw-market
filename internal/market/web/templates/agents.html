@@ -30,6 +30,7 @@
             <p>对齐 1Panel 的智能体列表、创建入口和基础运维动作。</p>
           </div>
           <div class="header-actions">
+            <a class="button" href="/ai/agents?create=1">创建智能体</a>
             <span class="user-badge">{{.CurrentUser.Email}}</span>
             <form method="post" action="/logout">
               <button class="button button-ghost" type="submit">退出</button>
@@ -63,7 +64,7 @@
           </article>
         </section>
 
-        <section class="page-grid">
+        <section class="page-grid single">
           <div class="card">
             <div class="card-header">
               <div>
@@ -112,16 +113,19 @@
                     <td>{{if .Agent.WebsitePrimaryDomain}}{{.Agent.WebsitePrimaryDomain}}{{else}}未绑定{{end}}</td>
                     <td>{{if .Agent.Remark}}{{.Agent.Remark}}{{else}}-{{end}}</td>
                     <td>
-                      <div class="inline-actions">
-                        <a class="link-button" href="/ai/agents/{{.Agent.ID}}/config">配置</a>
-                        <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
-                          <input type="hidden" name="action" value="restart" />
-                          <button class="link-button" type="submit">重启</button>
-                        </form>
-                        <form method="post" action="/ai/agents/{{.Agent.ID}}/token/reset">
-                          <button class="link-button" type="submit">重置 Token</button>
-                        </form>
-                      </div>
+                      <details class="more-menu">
+                        <summary class="button button-ghost button-small">更多</summary>
+                        <div class="more-menu-panel">
+                          <a class="more-menu-item" href="/ai/agents/{{.Agent.ID}}/config">配置</a>
+                          <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
+                            <input type="hidden" name="action" value="restart" />
+                            <button class="more-menu-item" type="submit">重启</button>
+                          </form>
+                          <form method="post" action="/ai/agents/{{.Agent.ID}}/token/reset">
+                            <button class="more-menu-item" type="submit">重置 Token</button>
+                          </form>
+                        </div>
+                      </details>
                     </td>
                   </tr>
                   {{end}}
@@ -144,12 +148,17 @@
             </div>
           </div>
 
-          <div class="card form-card">
+        </section>
+
+        {{if .ShowAgentCreate}}
+        <div class="modal-overlay">
+          <div class="modal-card">
             <div class="card-header">
               <div>
                 <h2>创建智能体</h2>
                 <p>字段结构参考 1Panel 创建智能体抽屉，保留简洁版。</p>
               </div>
+              <a class="button button-ghost" href="/ai/agents{{if .Query}}?q={{.Query}}{{end}}">关闭</a>
             </div>
             <form method="post" action="/ai/agents/create" class="form-grid">
               <label>
@@ -223,11 +232,13 @@
                 <input type="text" name="remark" placeholder="例如：用于微信服务号接待" />
               </label>
               <div class="form-actions span-2">
+                <a class="button button-ghost" href="/ai/agents{{if .Query}}?q={{.Query}}{{end}}">取消</a>
                 <button class="button" type="submit">创建智能体</button>
               </div>
             </form>
           </div>
-        </section>
+        </div>
+        {{end}}
       </main>
     </div>
   </body>
