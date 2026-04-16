@@ -278,7 +278,7 @@ func (r *DockerRuntime) CheckWeixinPlugin(ctx context.Context, agent Agent, chec
 	}
 	latestVersion, err := loadPluginLatestVersion(ctx, agent.DockerContainerName, "weixin")
 	if err != nil {
-		return status, err
+		return status, nil
 	}
 	status.LatestVersion = latestVersion
 	status.Upgradable = compareVersion(latestVersion, currentVersion) > 0
@@ -293,6 +293,9 @@ func (r *DockerRuntime) ManageWeixinPlugin(ctx context.Context, agent Agent, act
 	timeout := 10 * time.Minute
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if err := ensureContainerRunning(runCtx, agent.DockerContainerName); err != nil {
+		return AgentPluginStatus{}, err
+	}
 	switch strings.TrimSpace(action) {
 	case "install":
 		if _, err := runDockerCommand(runCtx, "exec", agent.DockerContainerName, "sh", "-c", buildPluginInstallScript(spec, pluginID)); err != nil {
@@ -321,9 +324,13 @@ func (r *DockerRuntime) ManageWeixinPlugin(ctx context.Context, agent Agent, act
 	default:
 		return AgentPluginStatus{}, fmt.Errorf("invalid plugin action: %s", action)
 	}
-	status, err := r.CheckWeixinPlugin(ctx, agent, true)
+	status, err := r.CheckWeixinPlugin(ctx, agent, false)
 	if err != nil {
 		return AgentPluginStatus{}, err
+	}
+	if latestVersion, latestErr := loadPluginLatestVersion(ctx, agent.DockerContainerName, "weixin"); latestErr == nil {
+		status.LatestVersion = latestVersion
+		status.Upgradable = compareVersion(latestVersion, status.CurrentVersion) > 0
 	}
 	status.LastAction = action
 	switch action {
@@ -341,6 +348,9 @@ func (r *DockerRuntime) ManageWeixinPlugin(ctx context.Context, agent Agent, act
 func (r *DockerRuntime) LoginWeixinChannel(ctx context.Context, agent Agent, onOutput func(string)) error {
 	runCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
+	if err := ensureContainerRunning(runCtx, agent.DockerContainerName); err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(runCtx, "docker", "exec", "-i", agent.DockerContainerName, "openclaw", "channels", "login", "--channel", "openclaw-weixin")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -638,6 +648,23 @@ func compareVersion(left, right string) int {
 		}
 	}
 	return 0
+}
+
+func ensureContainerRunning(ctx context.Context, containerName string) error {
+	if strings.TrimSpace(containerName) == "" {
+		return fmt.Errorf("empty container name")
+	}
+	out, err := runDockerCommand(ctx, "inspect", "-f", "{{.State.Running}}", containerName)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) == "true" {
+		return nil
+	}
+	if _, err := runDockerCommand(ctx, "start", containerName); err != nil {
+		return fmt.Errorf("start container before plugin action: %w", err)
+	}
+	return nil
 }
 
 func versionParts(value string) []int {

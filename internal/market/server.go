@@ -746,7 +746,7 @@ func (s *Server) handleUpdateWeixinPlugin(w http.ResponseWriter, r *http.Request
 	}
 	status, err := s.runtime.ManageWeixinPlugin(r.Context(), detail.Agent, action)
 	if err != nil {
-		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "更新微信插件失败")
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "更新微信插件失败: "+err.Error())
 		return
 	}
 	if err := s.store.SetAgentWeixinPluginStatus(user.ID, agentID, status); err != nil {
