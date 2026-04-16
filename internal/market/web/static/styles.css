@@ -617,6 +617,22 @@ textarea {
   text-align: left;
 }
 
+.task-log {
+  max-height: 320px;
+  margin: 16px 0;
+  padding: 14px;
+  overflow: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .auth-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(360px, 440px);

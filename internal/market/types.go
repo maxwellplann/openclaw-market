@@ -191,7 +191,10 @@ type ChannelBinding struct {
 	ScanToken   string     `json:"scan_token"`
 	QRContent   string     `json:"qr_content"`
 	Status      string     `json:"status"`
+	TaskOutput  string     `json:"task_output"`
+	TaskError   string     `json:"task_error"`
 	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 	BoundAt     *time.Time `json:"bound_at,omitempty"`
 }
 

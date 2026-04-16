@@ -118,8 +118,15 @@ func TestStoreAccountAgentBindingFlow(t *testing.T) {
 		t.Fatalf("allowed origins = %d, want 2", len(detail.Agent.SecurityConfig.AllowedOrigins))
 	}
 
-	if err := store.UpdateAgentWeixinPlugin(user.ID, agent.ID, "install"); err != nil {
-		t.Fatalf("UpdateAgentWeixinPlugin(install) error = %v", err)
+	if err := store.SetAgentWeixinPluginStatus(user.ID, agent.ID, AgentPluginStatus{
+		Type:           "weixin",
+		Installed:      true,
+		CurrentVersion: "2026.4.14",
+		LatestVersion:  "2026.4.14",
+		LastAction:     "install",
+		LastMessage:    "微信插件安装完成",
+	}); err != nil {
+		t.Fatalf("SetAgentWeixinPluginStatus() error = %v", err)
 	}
 	if err := store.RecordAgentWeixinLogin(user.ID, agent.ID, "微信扫码登录任务已创建"); err != nil {
 		t.Fatalf("RecordAgentWeixinLogin() error = %v", err)

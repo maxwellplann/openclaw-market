@@ -528,6 +528,21 @@ func (s *Server) handleAgentConfigPage(w http.ResponseWriter, r *http.Request, u
 			subTab = "security"
 		}
 	}
+	renderError := r.URL.Query().Get("error")
+	if tab == "channels" && subTab == "weixin" {
+		status, err := s.runtime.CheckWeixinPlugin(r.Context(), detail.Agent, true)
+		if err == nil {
+			status.LastAction = detail.Agent.WeixinChannel.Plugin.LastAction
+			status.LastMessage = detail.Agent.WeixinChannel.Plugin.LastMessage
+			if !detail.Agent.WeixinChannel.Plugin.UpdatedAt.IsZero() {
+				status.UpdatedAt = detail.Agent.WeixinChannel.Plugin.UpdatedAt
+			}
+			_ = s.store.SetAgentWeixinPluginStatus(user.ID, agentID, status)
+			detail, _ = s.store.GetAgentDetail(user.ID, agentID)
+		} else if renderError == "" {
+			renderError = "刷新微信插件状态失败: " + err.Error()
+		}
+	}
 	bindingURL := ""
 	if detail.Binding != nil {
 		bindingURL = "/bindings/" + detail.Binding.ScanToken
@@ -543,7 +558,7 @@ func (s *Server) handleAgentConfigPage(w http.ResponseWriter, r *http.Request, u
 		Detail:            &detail,
 		ChannelBindingURL: bindingURL,
 		Message:           r.URL.Query().Get("message"),
-		Error:             r.URL.Query().Get("error"),
+		Error:             renderError,
 	})
 }
 
@@ -724,8 +739,18 @@ func (s *Server) handleUpdateWeixinPlugin(w http.ResponseWriter, r *http.Request
 		return
 	}
 	action := strings.TrimSpace(r.FormValue("action"))
-	if err := s.store.UpdateAgentWeixinPlugin(user.ID, agentID, action); err != nil {
+	detail, err := s.store.GetAgentDetail(user.ID, agentID)
+	if err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "智能体不存在")
+		return
+	}
+	status, err := s.runtime.ManageWeixinPlugin(r.Context(), detail.Agent, action)
+	if err != nil {
 		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "更新微信插件失败")
+		return
+	}
+	if err := s.store.SetAgentWeixinPluginStatus(user.ID, agentID, status); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "保存微信插件状态失败")
 		return
 	}
 	message := "微信插件状态已更新"
@@ -746,7 +771,16 @@ func (s *Server) handleLoginWeixinChannel(w http.ResponseWriter, r *http.Request
 		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "智能体不存在")
 		return
 	}
-	if !detail.Agent.WeixinChannel.Plugin.Installed {
+	status, err := s.runtime.CheckWeixinPlugin(r.Context(), detail.Agent, false)
+	if err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "检查微信插件状态失败")
+		return
+	}
+	status.LastAction = detail.Agent.WeixinChannel.Plugin.LastAction
+	status.LastMessage = detail.Agent.WeixinChannel.Plugin.LastMessage
+	status.UpdatedAt = time.Now()
+	_ = s.store.SetAgentWeixinPluginStatus(user.ID, agentID, status)
+	if !status.Installed {
 		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "请先安装微信插件")
 		return
 	}
@@ -755,7 +789,12 @@ func (s *Server) handleLoginWeixinChannel(w http.ResponseWriter, r *http.Request
 		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "创建扫码登录任务失败")
 		return
 	}
-	_ = s.store.RecordAgentWeixinLogin(user.ID, agentID, "微信扫码登录任务已创建")
+	if err := s.store.StartBindingTask(user.ID, binding.ScanToken); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "初始化扫码任务失败")
+		return
+	}
+	_ = s.store.RecordAgentWeixinLogin(user.ID, agentID, "微信扫码任务已启动，正在等待 OpenClaw 输出二维码")
+	s.runWeixinLoginTask(user.ID, detail.Agent, binding.ScanToken)
 	http.Redirect(w, r, "/bindings/"+binding.ScanToken, http.StatusSeeOther)
 }
 
@@ -854,10 +893,14 @@ func (s *Server) handleBindingRoutes(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ai/agents?error=未找到待绑定记录", http.StatusSeeOther)
 		return
 	}
-	png, err := qrcode.Encode(binding.QRContent, qrcode.Medium, 256)
-	if err != nil {
-		http.Redirect(w, r, "/ai/agents?error=二维码生成失败", http.StatusSeeOther)
-		return
+	qrDataURI := ""
+	if strings.TrimSpace(binding.QRContent) != "" {
+		png, err := qrcode.Encode(binding.QRContent, qrcode.Medium, 256)
+		if err != nil {
+			http.Redirect(w, r, "/ai/agents?error=二维码生成失败", http.StatusSeeOther)
+			return
+		}
+		qrDataURI = "data:image/png;base64," + encodeBase64(png)
 	}
 	s.render(w, "binding.html", viewData{
 		Title:             "微信扫码绑定",
@@ -865,8 +908,25 @@ func (s *Server) handleBindingRoutes(w http.ResponseWriter, r *http.Request) {
 		CurrentSection:    "agents",
 		Binding:           &binding,
 		ChannelBindingURL: fmt.Sprintf("/ai/agents/%d/config?tab=channels", binding.AgentID),
-		QRDataURI:         "data:image/png;base64," + encodeBase64(png),
+		QRDataURI:         qrDataURI,
 	})
+}
+
+func (s *Server) runWeixinLoginTask(userID int64, agent Agent, token string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		err := s.runtime.LoginWeixinChannel(ctx, agent, func(chunk string) {
+			_ = s.store.AppendBindingOutput(userID, token, chunk)
+		})
+		if err != nil {
+			_ = s.store.FailBinding(userID, token, err.Error())
+			_ = s.store.RecordAgentWeixinLogin(userID, agent.ID, "微信扫码连接失败: "+err.Error())
+			return
+		}
+		_, _ = s.store.CompleteBinding(userID, token)
+		_ = s.store.RecordAgentWeixinLogin(userID, agent.ID, "微信渠道已通过 OpenClaw 扫码登录完成")
+	}()
 }
 
 func (s *Server) currentUser(r *http.Request) (*User, bool) {

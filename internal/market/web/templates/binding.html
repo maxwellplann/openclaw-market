@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{.Title}}</title>
+    {{if eq .Binding.Status "running"}}<meta http-equiv="refresh" content="3" />{{end}}
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body class="panel-page binding-page">
@@ -11,17 +12,31 @@
       <div class="binding-card">
         <span class="page-tag">微信渠道绑定</span>
         <h1>{{.Binding.ChannelName}}</h1>
+        {{if .QRDataURI}}
         <p>扫码后点击确认，回到智能体配置页继续完成渠道启用。</p>
         <div class="qr-box">
           <img src="{{.QRDataURI}}" alt="微信绑定二维码" />
         </div>
+        {{else}}
+        <p>当前页展示容器内 `openclaw channels login --channel openclaw-weixin` 的实时输出，二维码和登录提示会直接出现在日志里。</p>
+        {{end}}
         <div class="binding-meta">
           <p><strong>状态：</strong>{{.Binding.Status}}</p>
           <p><strong>Token：</strong><span class="mono">{{.Binding.ScanToken}}</span></p>
         </div>
+        {{if .Binding.TaskError}}
+        <div class="alert error">{{.Binding.TaskError}}</div>
+        {{end}}
+        {{if .Binding.TaskOutput}}
+        <pre class="task-log">{{.Binding.TaskOutput}}</pre>
+        {{end}}
+        {{if .QRDataURI}}
         <form method="post" action="/bindings/{{.Binding.ScanToken}}">
           <button class="button full" type="submit">我已扫码，确认绑定</button>
         </form>
+        {{else if eq .Binding.Status "running"}}
+        <a class="button full" href="/bindings/{{.Binding.ScanToken}}">刷新任务输出</a>
+        {{end}}
         <a class="button button-ghost full" href="{{.ChannelBindingURL}}">返回智能体配置</a>
       </div>
     </main>

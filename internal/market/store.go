@@ -789,45 +789,21 @@ func (s *Store) UpdateAgentWeixinChannel(userID, agentID int64, cfg WeixinChanne
 	return ErrOpenClawNotFound
 }
 
-func (s *Store) UpdateAgentWeixinPlugin(userID, agentID int64, action string) error {
+func (s *Store) SetAgentWeixinPluginStatus(userID, agentID int64, status AgentPluginStatus) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.data.Agents {
 		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
 			continue
 		}
-		now := time.Now()
-		status := s.data.Agents[i].WeixinChannel.Plugin
 		if status.Type == "" {
 			status.Type = "weixin"
 		}
-		switch action {
-		case "install":
-			status.Installed = true
-			status.CurrentVersion = "v2026.4.14"
-			status.LatestVersion = "v2026.4.14"
-			status.Upgradable = false
-			status.LastAction = action
-			status.LastMessage = "微信插件安装完成"
-		case "upgrade":
-			status.Installed = true
-			status.CurrentVersion = "v2026.4.14"
-			status.LatestVersion = "v2026.4.14"
-			status.Upgradable = false
-			status.LastAction = action
-			status.LastMessage = "微信插件已升级到最新版本"
-		case "uninstall":
-			status.Installed = false
-			status.CurrentVersion = ""
-			status.Upgradable = false
-			status.LastAction = action
-			status.LastMessage = "微信插件已卸载"
-		default:
-			return fmt.Errorf("invalid plugin action: %s", action)
+		if status.UpdatedAt.IsZero() {
+			status.UpdatedAt = time.Now()
 		}
-		status.UpdatedAt = now
 		s.data.Agents[i].WeixinChannel.Plugin = status
-		s.data.Agents[i].UpdatedAt = now
+		s.data.Agents[i].UpdatedAt = status.UpdatedAt
 		return s.saveLocked()
 	}
 	return ErrOpenClawNotFound
@@ -865,6 +841,53 @@ func (s *Store) RecordAgentWeixinLogin(userID, agentID int64, message string) er
 		return s.saveLocked()
 	}
 	return ErrOpenClawNotFound
+}
+
+func (s *Store) StartBindingTask(userID int64, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Bindings {
+		if s.data.Bindings[i].ScanToken != token || s.data.Bindings[i].UserID != userID {
+			continue
+		}
+		s.data.Bindings[i].Status = "running"
+		s.data.Bindings[i].QRContent = ""
+		s.data.Bindings[i].TaskOutput = ""
+		s.data.Bindings[i].TaskError = ""
+		s.data.Bindings[i].BoundAt = nil
+		s.data.Bindings[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrBindingNotFound
+}
+
+func (s *Store) AppendBindingOutput(userID int64, token, chunk string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Bindings {
+		if s.data.Bindings[i].ScanToken != token || s.data.Bindings[i].UserID != userID {
+			continue
+		}
+		s.data.Bindings[i].TaskOutput += chunk
+		s.data.Bindings[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrBindingNotFound
+}
+
+func (s *Store) FailBinding(userID int64, token, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Bindings {
+		if s.data.Bindings[i].ScanToken != token || s.data.Bindings[i].UserID != userID {
+			continue
+		}
+		s.data.Bindings[i].Status = "failed"
+		s.data.Bindings[i].TaskError = strings.TrimSpace(message)
+		s.data.Bindings[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrBindingNotFound
 }
 
 func (s *Store) UpdateAgentTelegramChannel(userID, agentID int64, cfg TelegramChannelConfig) error {
@@ -1009,6 +1032,7 @@ func (s *Store) CreateBinding(userID, agentID int64, channelName string) (Channe
 		QRContent:   fmt.Sprintf("wechat://openclaw-market/connect?token=%s", token),
 		Status:      "pending",
 		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 	s.data.NextBindingID++
 	replaced := false
@@ -1054,6 +1078,8 @@ func (s *Store) CompleteBinding(userID int64, token string) (ChannelBinding, err
 			now := time.Now()
 			s.data.Bindings[i].Status = "connected"
 			s.data.Bindings[i].BoundAt = &now
+			s.data.Bindings[i].TaskError = ""
+			s.data.Bindings[i].UpdatedAt = now
 			for j := range s.data.Agents {
 				if s.data.Agents[j].ID == s.data.Bindings[i].AgentID && s.data.Agents[j].UserID == userID {
 					s.data.Agents[j].WeixinChannel.Enabled = true
