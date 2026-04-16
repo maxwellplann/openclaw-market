@@ -49,7 +49,7 @@ func TestStoreAccountAgentBindingFlow(t *testing.T) {
 		WebUIPort:           18789,
 		DockerContainerName: "openclaw-u1-service",
 		DockerImage:         "1panel/openclaw:2026.4.14",
-		Status:              "container_created",
+		Status:              "running",
 	})
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)

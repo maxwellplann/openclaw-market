@@ -389,6 +389,16 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	status := "created"
+	message := "容器已创建，等待启动"
+	if err := s.runtime.ChangeContainerState(ctx, provision.ContainerName, "start"); err != nil {
+		status = "start_failed"
+		message = "容器创建成功，但启动失败: " + err.Error()
+	} else {
+		status = "running"
+		message = "容器已创建并启动"
+	}
+
 	fallbacks := splitFormList(r.FormValue("fallbacks"))
 	agent := Agent{
 		Name:          name,
@@ -402,8 +412,8 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		BaseURL:       account.BaseURL,
 		APIKey:        account.APIKey,
 		Token:         provision.GatewayToken,
-		Status:        "running",
-		Message:       "容器已创建",
+		Status:        status,
+		Message:       message,
 		AccountID:     account.ID,
 		ModelConfig: AgentModelConfig{
 			AccountID: account.ID,
@@ -434,7 +444,11 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ai/agents?error=创建智能体失败", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?message=智能体容器已创建", created.ID), http.StatusSeeOther)
+	if status == "start_failed" {
+		http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?error=%s", created.ID, template.URLQueryEscaper(message)), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?message=智能体容器已创建并启动", created.ID), http.StatusSeeOther)
 }
 
 func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
