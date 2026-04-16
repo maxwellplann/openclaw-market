@@ -57,36 +57,91 @@ type AgentModelConfig struct {
 	Fallbacks []string `json:"fallbacks"`
 }
 
+type AgentSecurityConfig struct {
+	AllowedOrigins []string `json:"allowed_origins"`
+}
+
+type AgentOtherConfig struct {
+	AutoUpgrade    bool   `json:"auto_upgrade"`
+	Timezone       string `json:"timezone"`
+	Language       string `json:"language"`
+	Theme          string `json:"theme"`
+	SearchProvider string `json:"search_provider"`
+	DefaultPrompt  string `json:"default_prompt"`
+}
+
+type AgentConfigFile struct {
+	Content   string    `json:"content"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type AgentSkill struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type AgentRole struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Prompt    string    `json:"prompt"`
+	Model     string    `json:"model"`
+	Channels  []string  `json:"channels"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type WeixinChannelConfig struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	AppID          string `json:"app_id"`
+	AppSecret      string `json:"app_secret"`
+	Token          string `json:"token"`
+	EncodingAESKey string `json:"encoding_aes_key"`
+	BoundChannel   string `json:"bound_channel"`
+}
+
 type Agent struct {
-	ID                   int64            `json:"id"`
-	UserID               int64            `json:"user_id"`
-	Name                 string           `json:"name"`
-	Remark               string           `json:"remark"`
-	AgentType            string           `json:"agent_type"`
-	Provider             string           `json:"provider"`
-	Model                string           `json:"model"`
-	APIType              string           `json:"api_type"`
-	MaxTokens            int              `json:"max_tokens"`
-	ContextWindow        int              `json:"context_window"`
-	BaseURL              string           `json:"base_url"`
-	APIKey               string           `json:"api_key"`
-	Token                string           `json:"token"`
-	Status               string           `json:"status"`
-	Message              string           `json:"message"`
-	AccountID            int64            `json:"account_id"`
-	ModelConfig          AgentModelConfig `json:"model_config"`
-	ConfigPath           string           `json:"config_path"`
-	WebUIPort            int              `json:"web_ui_port"`
-	BridgePort           int              `json:"bridge_port"`
-	AllowedOrigins       []string         `json:"allowed_origins"`
-	DockerContainerID    string           `json:"docker_container_id"`
-	DockerContainerName  string           `json:"docker_container_name"`
-	DockerImage          string           `json:"docker_image"`
-	DockerGatewayToken   string           `json:"docker_gateway_token"`
-	DockerConfigDir      string           `json:"docker_config_dir"`
-	DockerWorkspaceDir   string           `json:"docker_workspace_dir"`
-	WebsitePrimaryDomain string           `json:"website_primary_domain"`
-	CreatedAt            time.Time        `json:"created_at"`
+	ID                   int64               `json:"id"`
+	UserID               int64               `json:"user_id"`
+	Name                 string              `json:"name"`
+	Remark               string              `json:"remark"`
+	AgentType            string              `json:"agent_type"`
+	Provider             string              `json:"provider"`
+	Model                string              `json:"model"`
+	APIType              string              `json:"api_type"`
+	MaxTokens            int                 `json:"max_tokens"`
+	ContextWindow        int                 `json:"context_window"`
+	BaseURL              string              `json:"base_url"`
+	APIKey               string              `json:"api_key"`
+	Token                string              `json:"token"`
+	Status               string              `json:"status"`
+	Message              string              `json:"message"`
+	AccountID            int64               `json:"account_id"`
+	ModelConfig          AgentModelConfig    `json:"model_config"`
+	SecurityConfig       AgentSecurityConfig `json:"security_config"`
+	OtherConfig          AgentOtherConfig    `json:"other_config"`
+	ConfigFile           AgentConfigFile     `json:"config_file"`
+	Skills               []AgentSkill        `json:"skills"`
+	Roles                []AgentRole         `json:"roles"`
+	WeixinChannel        WeixinChannelConfig `json:"weixin_channel"`
+	AppVersion           string              `json:"app_version"`
+	RestartPolicy        string              `json:"restart_policy"`
+	AllowPort            bool                `json:"allow_port"`
+	SpecifyIP            string              `json:"specify_ip"`
+	ConfigPath           string              `json:"config_path"`
+	WebUIPort            int                 `json:"web_ui_port"`
+	BridgePort           int                 `json:"bridge_port"`
+	AllowedOrigins       []string            `json:"allowed_origins"`
+	DockerContainerID    string              `json:"docker_container_id"`
+	DockerContainerName  string              `json:"docker_container_name"`
+	DockerImage          string              `json:"docker_image"`
+	DockerGatewayToken   string              `json:"docker_gateway_token"`
+	DockerConfigDir      string              `json:"docker_config_dir"`
+	DockerWorkspaceDir   string              `json:"docker_workspace_dir"`
+	WebsitePrimaryDomain string              `json:"website_primary_domain"`
+	CreatedAt            time.Time           `json:"created_at"`
+	UpdatedAt            time.Time           `json:"updated_at"`
 }
 
 type ChannelBinding struct {
@@ -108,4 +163,18 @@ type AgentDashboardItem struct {
 	Binding         *ChannelBinding
 	BindingURL      string
 	FallbackSummary string
+}
+
+type DashboardStats struct {
+	Providers int
+	Accounts  int
+	Models    int
+	Agents    int
+	Connected int
+}
+
+type AgentDetail struct {
+	Agent   Agent
+	Account *AgentAccount
+	Binding *ChannelBinding
 }

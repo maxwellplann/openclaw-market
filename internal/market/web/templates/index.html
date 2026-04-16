@@ -6,60 +6,64 @@
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="landing-page">
-    <main class="shell hero-shell">
-      <section class="hero-card">
-        <div class="hero-copy">
-          <span class="eyebrow">OpenClaw Market</span>
-          <h1>用一个 Go 项目管理 OpenClaw、模型和微信 Channel</h1>
-          <p>
-            参考 1Panel / MaxKB 的分层思路：先配置模型能力，再为用户领取多个
-            OpenClaw 实例，并用微信扫码接入真实业务通道。
-          </p>
-          <ul class="hero-points">
-            <li>支持用户注册、登录和会话保持</li>
-            <li>支持领取多个 OpenClaw 智能体实例</li>
-            <li>支持模型档案与智能体实例分离</li>
-            <li>支持微信扫码连接 channel 的完整闭环</li>
-          </ul>
+  <body>
+    <main class="auth-shell">
+      <section class="auth-aside">
+        <span class="page-tag">OpenClaw Market</span>
+        <h1>用 Go 管理 OpenClaw 智能体、模型账号和微信渠道</h1>
+        <p class="muted">
+          页面结构、信息层次和配置方式尽量贴近 1Panel AI 模块，保持后台风格和简洁操作流。
+        </p>
+        <div class="card subcard">
+          <div class="list-stack">
+            <div class="list-item"><strong>智能体列表</strong><span class="muted">容器、端口、Token、配置入口</span></div>
+            <div class="list-item"><strong>模型账号</strong><span class="muted">账号池、模型池、Provider 目录</span></div>
+            <div class="list-item"><strong>配置页</strong><span class="muted">模型、渠道、技能、设置、角色</span></div>
+          </div>
         </div>
+      </section>
 
+      <section class="auth-panel">
         <div class="auth-card">
-          <div class="tabs">
+          <span class="page-tag">账户</span>
+          <h2>{{if eq .CurrentTab "register"}}注册{{else}}登录{{end}}</h2>
+          <p class="muted">登录后进入 AI 模块控制台。</p>
+
+          <div class="auth-tabs">
             <a class="{{if eq .CurrentTab "login"}}active{{end}}" href="/?tab=login">登录</a>
             <a class="{{if eq .CurrentTab "register"}}active{{end}}" href="/?tab=register">注册</a>
           </div>
 
-          {{if .Message}}
-          <div class="banner success">{{.Message}}</div>
-          {{end}}
-          {{if .Error}}
-          <div class="banner error">{{.Error}}</div>
-          {{end}}
+          {{if .Message}}<div class="alert success">{{.Message}}</div>{{end}}
+          {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
 
           {{if eq .CurrentTab "register"}}
-          <form method="post" action="/register" class="form-stack">
-            <label>
+          <form method="post" action="/register" class="form-grid">
+            <label class="span-2">
               <span>邮箱</span>
               <input type="email" name="email" placeholder="name@example.com" required />
             </label>
-            <label>
+            <label class="span-2">
               <span>密码</span>
               <input type="password" name="password" placeholder="至少 6 位" required />
             </label>
-            <button type="submit">创建账号并进入控制台</button>
+            <div class="form-actions span-2">
+              <button class="button full" type="submit">创建账号并进入控制台</button>
+            </div>
           </form>
           {{else}}
-          <form method="post" action="/login" class="form-stack">
-            <label>
+          <form method="post" action="/login" class="form-grid">
+            <label class="span-2">
               <span>邮箱</span>
               <input type="email" name="email" placeholder="name@example.com" required />
             </label>
-            <label>
+            <label class="span-2">
               <span>密码</span>
               <input type="password" name="password" placeholder="输入你的密码" required />
             </label>
-            <button type="submit">登录控制台</button>
+            <div class="form-actions span-2">
+              <button class="button full" type="submit">登录控制台</button>
+            </div>
           </form>
           {{end}}
         </div>

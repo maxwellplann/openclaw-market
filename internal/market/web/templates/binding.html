@@ -6,30 +6,24 @@
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="binding-page">
-    <main class="shell binding-shell">
-      <a class="text-link" href="/dashboard">返回控制台</a>
-      <section class="binding-card">
-        <div class="binding-copy">
-          <span class="eyebrow">渠道绑定</span>
-          <h1>{{.Binding.ChannelName}} 连接智能体</h1>
-          <p>
-            扫描下方二维码，将 channel 接入当前 Agent。这个流程预留了真实微信回调的替换点，
-            现在用确认按钮模拟扫码完成。
-          </p>
-          <div class="binding-meta">
-            <span>绑定状态：{{.Binding.Status}}</span>
-            <span>Token：{{.Binding.ScanToken}}</span>
-          </div>
-          <form method="post" action="/bindings/{{.Binding.ScanToken}}">
-            <button type="submit">已扫码，完成绑定</button>
-          </form>
-        </div>
-        <div class="qr-card">
+  <body class="panel-page binding-page">
+    <main class="binding-shell">
+      <div class="binding-card">
+        <span class="page-tag">微信渠道绑定</span>
+        <h1>{{.Binding.ChannelName}}</h1>
+        <p>扫码后点击确认，回到智能体配置页继续完成渠道启用。</p>
+        <div class="qr-box">
           <img src="{{.QRDataURI}}" alt="微信绑定二维码" />
-          <code>{{.Binding.QRContent}}</code>
         </div>
-      </section>
+        <div class="binding-meta">
+          <p><strong>状态：</strong>{{.Binding.Status}}</p>
+          <p><strong>Token：</strong><span class="mono">{{.Binding.ScanToken}}</span></p>
+        </div>
+        <form method="post" action="/bindings/{{.Binding.ScanToken}}">
+          <button class="button full" type="submit">我已扫码，确认绑定</button>
+        </form>
+        <a class="button button-ghost full" href="{{.ChannelBindingURL}}">返回智能体配置</a>
+      </div>
     </main>
   </body>
 </html>

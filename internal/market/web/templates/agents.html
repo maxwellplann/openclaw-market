@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="panel-page">
+    <div class="panel-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">1P</div>
+          <div>
+            <strong>OpenClaw Market</strong>
+            <p>AI 模块</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="{{if eq .CurrentSection "agents"}}active{{end}}" href="/ai/agents">智能体</a>
+          <a class="{{if eq .CurrentSection "accounts"}}active{{end}}" href="/ai/accounts">模型账号</a>
+        </nav>
+      </aside>
+
+      <main class="main-shell">
+        <header class="page-header">
+          <div>
+            <span class="page-tag">AI / Agents</span>
+            <h1>智能体</h1>
+            <p>对齐 1Panel 的智能体列表、创建入口和基础运维动作。</p>
+          </div>
+          <div class="header-actions">
+            <span class="user-badge">{{.CurrentUser.Email}}</span>
+            <form method="post" action="/logout">
+              <button class="button button-ghost" type="submit">退出</button>
+            </form>
+          </div>
+        </header>
+
+        {{if .Message}}<div class="alert success">{{.Message}}</div>{{end}}
+        {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span>智能体</span>
+            <strong>{{.Stats.Agents}}</strong>
+            <p>当前已创建实例</p>
+          </article>
+          <article class="stat-card">
+            <span>模型账号</span>
+            <strong>{{.Stats.Accounts}}</strong>
+            <p>账号池数量</p>
+          </article>
+          <article class="stat-card">
+            <span>模型池</span>
+            <strong>{{.Stats.Models}}</strong>
+            <p>账号下全部模型</p>
+          </article>
+          <article class="stat-card">
+            <span>微信渠道</span>
+            <strong>{{.Stats.Connected}}</strong>
+            <p>已完成扫码绑定</p>
+          </article>
+        </section>
+
+        <section class="page-grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>智能体列表</h2>
+                <p>保持 1Panel 的后台列表密度和信息结构。</p>
+              </div>
+            </div>
+            <table class="panel-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>模型</th>
+                  <th>账号</th>
+                  <th>端口</th>
+                  <th>网站</th>
+                  <th>备注</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{if .Agents}}
+                  {{range .Agents}}
+                  <tr>
+                    <td>
+                      <div class="table-primary">{{.Agent.Name}}</div>
+                      <div class="table-sub mono">{{.Agent.DockerContainerName}}</div>
+                    </td>
+                    <td>{{.Agent.AgentType}}</td>
+                    <td>
+                      <span class="status {{if eq .Agent.Status "running"}}green{{else if eq .Agent.Status "stopped"}}gray{{else}}blue{{end}}">
+                        {{.Agent.Status}}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="table-primary">{{.Agent.Model}}</div>
+                      <div class="table-sub">{{if .FallbackSummary}}Fallback: {{.FallbackSummary}}{{else}}无{{end}}</div>
+                    </td>
+                    <td>{{if .Account}}{{.Account.Name}}{{end}}</td>
+                    <td class="mono">{{.Agent.WebUIPort}}</td>
+                    <td>{{if .Agent.WebsitePrimaryDomain}}{{.Agent.WebsitePrimaryDomain}}{{else}}未绑定{{end}}</td>
+                    <td>{{if .Agent.Remark}}{{.Agent.Remark}}{{else}}-{{end}}</td>
+                    <td>
+                      <div class="inline-actions">
+                        <a class="link-button" href="/ai/agents/{{.Agent.ID}}/config">配置</a>
+                        <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
+                          <input type="hidden" name="action" value="restart" />
+                          <button class="link-button" type="submit">重启</button>
+                        </form>
+                        <form method="post" action="/ai/agents/{{.Agent.ID}}/token/reset">
+                          <button class="link-button" type="submit">重置 Token</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                  {{end}}
+                {{else}}
+                  <tr>
+                    <td colspan="9" class="empty-row">还没有智能体</td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card form-card">
+            <div class="card-header">
+              <div>
+                <h2>创建智能体</h2>
+                <p>字段结构参考 1Panel 创建智能体抽屉，保留简洁版。</p>
+              </div>
+            </div>
+            <form method="post" action="/ai/agents/create" class="form-grid">
+              <label>
+                <span>名称</span>
+                <input type="text" name="name" placeholder="例如：客服智能体" required />
+              </label>
+              <label>
+                <span>模型账号</span>
+                <select name="account_id" required>
+                  <option value="">请选择账号</option>
+                  {{range .Accounts}}
+                  <option value="{{.ID}}">{{.Name}} · {{.Provider}}</option>
+                  {{end}}
+                </select>
+              </label>
+              <label class="span-2">
+                <span>主模型</span>
+                <select name="model" required>
+                  <option value="">请选择模型</option>
+                  {{range .Accounts}}
+                  <optgroup label="{{.Name}}">
+                    {{range .Models}}
+                    <option value="{{.ID}}">{{.Name}} ({{.ID}})</option>
+                    {{end}}
+                  </optgroup>
+                  {{end}}
+                </select>
+              </label>
+              <label class="span-2">
+                <span>Fallback 模型</span>
+                <input type="text" name="fallbacks" placeholder="多个模型用逗号分隔" />
+              </label>
+              <label>
+                <span>WebUI 端口</span>
+                <input type="number" name="web_ui_port" placeholder="默认自动分配" />
+              </label>
+              <label>
+                <span>Bridge 端口</span>
+                <input type="number" name="bridge_port" placeholder="默认 WebUI + 1000" />
+              </label>
+              <label class="span-2">
+                <span>Allowed Origins</span>
+                <textarea name="allowed_origins" rows="3" placeholder="http://127.0.0.1&#10;http://localhost:3000"></textarea>
+              </label>
+              <label>
+                <span>Gateway Token</span>
+                <input type="text" name="token" placeholder="留空自动生成" />
+              </label>
+              <label>
+                <span>Restart Policy</span>
+                <select name="restart_policy">
+                  <option value="unless-stopped">unless-stopped</option>
+                  <option value="always">always</option>
+                  <option value="no">no</option>
+                </select>
+              </label>
+              <label>
+                <span>绑定域名</span>
+                <input type="text" name="website_primary_domain" placeholder="agent.example.com" />
+              </label>
+              <label>
+                <span>指定 IP</span>
+                <input type="text" name="specify_ip" placeholder="0.0.0.0" />
+              </label>
+              <label class="checkbox-field">
+                <input type="checkbox" name="allow_port" checked />
+                <span>开放端口</span>
+              </label>
+              <label class="span-2">
+                <span>备注</span>
+                <input type="text" name="remark" placeholder="例如：用于微信服务号接待" />
+              </label>
+              <div class="form-actions span-2">
+                <button class="button" type="submit">创建智能体</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

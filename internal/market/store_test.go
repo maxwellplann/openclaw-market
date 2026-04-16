@@ -70,4 +70,51 @@ func TestStoreAccountAgentBindingFlow(t *testing.T) {
 	if done.Status != "connected" {
 		t.Fatalf("binding status = %s, want connected", done.Status)
 	}
+
+	if err := store.UpdateAgentSecurityConfig(user.ID, agent.ID, []string{"http://127.0.0.1", "http://localhost:3000"}); err != nil {
+		t.Fatalf("UpdateAgentSecurityConfig() error = %v", err)
+	}
+
+	if err := store.UpdateAgentOtherConfig(user.ID, agent.ID, AgentOtherConfig{
+		AutoUpgrade:    true,
+		Timezone:       "Asia/Shanghai",
+		Language:       "zh-CN",
+		Theme:          "light",
+		SearchProvider: "bing",
+		DefaultPrompt:  "你是客服智能体",
+	}); err != nil {
+		t.Fatalf("UpdateAgentOtherConfig() error = %v", err)
+	}
+
+	if err := store.UpsertAgentSkill(user.ID, agent.ID, AgentSkill{
+		Name:        "wechat",
+		Description: "微信渠道处理",
+		Source:      "custom",
+		Enabled:     true,
+	}); err != nil {
+		t.Fatalf("UpsertAgentSkill() error = %v", err)
+	}
+
+	if err := store.CreateAgentRole(user.ID, agent.ID, AgentRole{
+		Name:     "客服接待",
+		Prompt:   "回答售前问题",
+		Model:    model.ID,
+		Channels: []string{"weixin"},
+	}); err != nil {
+		t.Fatalf("CreateAgentRole() error = %v", err)
+	}
+
+	detail, err := store.GetAgentDetail(user.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("GetAgentDetail() error = %v", err)
+	}
+	if len(detail.Agent.Roles) != 1 {
+		t.Fatalf("role count = %d, want 1", len(detail.Agent.Roles))
+	}
+	if len(detail.Agent.Skills) == 0 {
+		t.Fatalf("skills should not be empty")
+	}
+	if len(detail.Agent.SecurityConfig.AllowedOrigins) != 2 {
+		t.Fatalf("allowed origins = %d, want 2", len(detail.Agent.SecurityConfig.AllowedOrigins))
+	}
 }

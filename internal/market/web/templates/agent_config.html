@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="panel-page">
+    <div class="panel-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">1P</div>
+          <div>
+            <strong>OpenClaw Market</strong>
+            <p>AI 模块</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="active" href="/ai/agents">智能体</a>
+          <a href="/ai/accounts">模型账号</a>
+        </nav>
+      </aside>
+
+      <main class="main-shell">
+        <header class="page-header">
+          <div>
+            <span class="page-tag">AI / Agents / Config</span>
+            <h1>{{.Detail.Agent.Name}}</h1>
+            <p>{{.Detail.Agent.AgentType}} · {{.Detail.Agent.DockerContainerName}} · {{.Detail.Agent.AppVersion}}</p>
+          </div>
+          <div class="header-actions">
+            <a class="button button-ghost" href="/ai/agents">返回列表</a>
+            <form method="post" action="/logout">
+              <button class="button button-ghost" type="submit">退出</button>
+            </form>
+          </div>
+        </header>
+
+        {{if .Message}}<div class="alert success">{{.Message}}</div>{{end}}
+        {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
+
+        <section class="detail-summary">
+          <div class="summary-card">
+            <span>状态</span>
+            <strong>{{.Detail.Agent.Status}}</strong>
+            <p>{{.Detail.Agent.Message}}</p>
+          </div>
+          <div class="summary-card">
+            <span>主模型</span>
+            <strong>{{.Detail.Agent.Model}}</strong>
+            <p>{{if .Detail.Account}}{{.Detail.Account.Name}}{{end}}</p>
+          </div>
+          <div class="summary-card">
+            <span>端口</span>
+            <strong>{{.Detail.Agent.WebUIPort}}</strong>
+            <p>Bridge {{.Detail.Agent.BridgePort}}</p>
+          </div>
+          <div class="summary-card">
+            <span>工作目录</span>
+            <strong class="mono-small">{{.Detail.Agent.DockerWorkspaceDir}}</strong>
+            <p>{{.Detail.Agent.DockerImage}}</p>
+          </div>
+        </section>
+
+        <section class="config-layout">
+          <nav class="config-tabs">
+            <a class="{{if eq .CurrentTab "channels"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=channels">渠道</a>
+            <a class="{{if eq .CurrentTab "model"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=model">模型</a>
+            <a class="{{if eq .CurrentTab "agent"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=agent">智能体角色</a>
+            <a class="{{if eq .CurrentTab "skills"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=skills">Skills</a>
+            <a class="{{if eq .CurrentTab "settings"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=settings&setting=security">设置</a>
+          </nav>
+
+          <div class="config-content">
+            {{if eq .CurrentTab "channels"}}
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>微信渠道</h2>
+                  <p>保留 1Panel AI 模块的渠道配置和扫码连接入口。</p>
+                </div>
+              </div>
+              <div class="split-grid">
+                <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin" class="form-grid">
+                  <label class="checkbox-field">
+                    <input type="checkbox" name="enabled" {{if .Detail.Agent.WeixinChannel.Enabled}}checked{{end}} />
+                    <span>启用微信渠道</span>
+                  </label>
+                  <label>
+                    <span>模式</span>
+                    <select name="mode">
+                      <option value="service" {{if eq .Detail.Agent.WeixinChannel.Mode "service"}}selected{{end}}>服务号</option>
+                      <option value="work" {{if eq .Detail.Agent.WeixinChannel.Mode "work"}}selected{{end}}>企业微信</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>AppID</span>
+                    <input type="text" name="app_id" value="{{.Detail.Agent.WeixinChannel.AppID}}" />
+                  </label>
+                  <label>
+                    <span>AppSecret</span>
+                    <input type="text" name="app_secret" value="{{.Detail.Agent.WeixinChannel.AppSecret}}" />
+                  </label>
+                  <label>
+                    <span>Token</span>
+                    <input type="text" name="token" value="{{.Detail.Agent.WeixinChannel.Token}}" />
+                  </label>
+                  <label class="span-2">
+                    <span>EncodingAESKey</span>
+                    <input type="text" name="encoding_aes_key" value="{{.Detail.Agent.WeixinChannel.EncodingAESKey}}" />
+                  </label>
+                  <label class="span-2">
+                    <span>绑定渠道名</span>
+                    <input type="text" name="bound_channel" value="{{.Detail.Agent.WeixinChannel.BoundChannel}}" placeholder="微信服务号" />
+                  </label>
+                  <div class="form-actions span-2">
+                    <button class="button" type="submit">保存渠道配置</button>
+                  </div>
+                </form>
+
+                <div class="side-stack">
+                  <div class="card subcard">
+                    <div class="card-header">
+                      <div>
+                        <h3>扫码绑定</h3>
+                      </div>
+                    </div>
+                    <p class="muted">当前状态：{{if .Detail.Binding}}{{.Detail.Binding.Status}}{{else}}未创建{{end}}</p>
+                    {{if .ChannelBindingURL}}
+                    <a class="button button-ghost full" href="{{.ChannelBindingURL}}">查看绑定页</a>
+                    {{end}}
+                    <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/connect">
+                      <input type="hidden" name="channel_name" value="{{if .Detail.Agent.WeixinChannel.BoundChannel}}{{.Detail.Agent.WeixinChannel.BoundChannel}}{{else}}微信服务号{{end}}" />
+                      <button class="button full" type="submit">生成二维码</button>
+                    </form>
+                  </div>
+
+                  <div class="card subcard">
+                    <div class="card-header">
+                      <div>
+                        <h3>基础信息</h3>
+                      </div>
+                    </div>
+                    <p class="muted mono-small">Config: {{.Detail.Agent.ConfigPath}}</p>
+                    <p class="muted mono-small">Container: {{.Detail.Agent.DockerContainerID}}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {{end}}
+
+            {{if eq .CurrentTab "model"}}
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>模型配置</h2>
+                  <p>对齐 1Panel 的账号、主模型和 fallback 模型配置。</p>
+                </div>
+              </div>
+              <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/model" class="form-grid">
+                <label class="span-2">
+                  <span>模型账号</span>
+                  <select name="account_id">
+                    {{range .Accounts}}
+                    <option value="{{.ID}}" {{if eq $.Detail.Agent.AccountID .ID}}selected{{end}}>{{.Name}} · {{.Provider}}</option>
+                    {{end}}
+                  </select>
+                </label>
+                <label class="span-2">
+                  <span>主模型</span>
+                  <select name="model">
+                    {{range .Accounts}}
+                    <optgroup label="{{.Name}}">
+                      {{range .Models}}
+                      <option value="{{.ID}}" {{if eq $.Detail.Agent.Model .ID}}selected{{end}}>{{.Name}} ({{.ID}})</option>
+                      {{end}}
+                    </optgroup>
+                    {{end}}
+                  </select>
+                </label>
+                <label class="span-2">
+                  <span>Fallback 模型</span>
+                  <textarea name="fallbacks" rows="3">{{join .Detail.Agent.ModelConfig.Fallbacks "\n"}}</textarea>
+                </label>
+                <div class="form-actions span-2">
+                  <button class="button" type="submit">保存模型配置</button>
+                </div>
+              </form>
+            </div>
+            {{end}}
+
+            {{if eq .CurrentTab "agent"}}
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>智能体角色</h2>
+                  <p>对齐 1Panel 的 Agent Role 和渠道绑定思路。</p>
+                </div>
+              </div>
+              <div class="split-grid">
+                <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/roles/create" class="form-grid">
+                  <label>
+                    <span>角色名</span>
+                    <input type="text" name="name" required />
+                  </label>
+                  <label>
+                    <span>模型</span>
+                    <input type="text" name="model" value="{{.Detail.Agent.Model}}" />
+                  </label>
+                  <label class="span-2">
+                    <span>渠道</span>
+                    <input type="text" name="channels" placeholder="weixin,web" />
+                  </label>
+                  <label class="span-2">
+                    <span>Prompt</span>
+                    <textarea name="prompt" rows="6"></textarea>
+                  </label>
+                  <div class="form-actions span-2">
+                    <button class="button" type="submit">新增角色</button>
+                  </div>
+                </form>
+
+                <div class="card subcard">
+                  <div class="card-header">
+                    <div>
+                      <h3>角色列表</h3>
+                    </div>
+                  </div>
+                  <div class="list-stack">
+                    {{if .Detail.Agent.Roles}}
+                      {{range .Detail.Agent.Roles}}
+                      <div class="list-item">
+                        <div>
+                          <strong>{{.Name}}</strong>
+                          <p class="muted">{{.Model}} · {{join .Channels ", "}}</p>
+                        </div>
+                        <form method="post" action="/ai/agents/{{$.Detail.Agent.ID}}/roles/delete">
+                          <input type="hidden" name="role_id" value="{{.ID}}" />
+                          <button class="link-button danger" type="submit">删除</button>
+                        </form>
+                      </div>
+                      {{end}}
+                    {{else}}
+                      <div class="empty-card">暂无角色</div>
+                    {{end}}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {{end}}
+
+            {{if eq .CurrentTab "skills"}}
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>Skills</h2>
+                  <p>保留 1Panel 的 skills 配置入口，支持启停和自定义。</p>
+                </div>
+              </div>
+              <div class="split-grid">
+                <div class="card subcard">
+                  <div class="card-header">
+                    <div>
+                      <h3>当前 Skills</h3>
+                    </div>
+                  </div>
+                  <div class="list-stack">
+                    {{range .Detail.Agent.Skills}}
+                    <form method="post" action="/ai/agents/{{$.Detail.Agent.ID}}/skills" class="list-item">
+                      <div>
+                        <strong>{{.Name}}</strong>
+                        <p class="muted">{{.Description}} · {{.Source}}</p>
+                      </div>
+                      <div class="inline-actions">
+                        <input type="hidden" name="name" value="{{.Name}}" />
+                        <input type="hidden" name="description" value="{{.Description}}" />
+                        <input type="hidden" name="source" value="{{.Source}}" />
+                        <label class="checkbox-inline">
+                          <input type="checkbox" name="enabled" value="on" {{if .Enabled}}checked{{end}} />
+                          <span>启用</span>
+                        </label>
+                        <button class="link-button" type="submit">保存</button>
+                      </div>
+                    </form>
+                    {{end}}
+                  </div>
+                </div>
+
+                <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/skills" class="form-grid">
+                  <label>
+                    <span>Skill 名称</span>
+                    <input type="text" name="name" required />
+                  </label>
+                  <label>
+                    <span>来源</span>
+                    <input type="text" name="source" value="custom" />
+                  </label>
+                  <label class="span-2">
+                    <span>描述</span>
+                    <input type="text" name="description" />
+                  </label>
+                  <label class="checkbox-field">
+                    <input type="checkbox" name="enabled" checked />
+                    <span>启用该 Skill</span>
+                  </label>
+                  <div class="form-actions span-2">
+                    <button class="button" type="submit">新增或更新 Skill</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {{end}}
+
+            {{if eq .CurrentTab "settings"}}
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>设置</h2>
+                  <p>保留 1Panel 的 security / other / config-file 分区。</p>
+                </div>
+              </div>
+              <div class="settings-layout">
+                <nav class="subtabs">
+                  <a class="{{if eq .CurrentSubTab "security"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=settings&setting=security">安全</a>
+                  <a class="{{if eq .CurrentSubTab "other"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=settings&setting=other">其他</a>
+                  <a class="{{if eq .CurrentSubTab "config-file"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=settings&setting=config-file">配置文件</a>
+                </nav>
+
+                <div class="subtab-content">
+                  {{if eq .CurrentSubTab "security"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/settings/security" class="form-grid">
+                    <label class="span-2">
+                      <span>Allowed Origins</span>
+                      <textarea name="allowed_origins" rows="8">{{join .Detail.Agent.SecurityConfig.AllowedOrigins "\n"}}</textarea>
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存安全设置</button>
+                    </div>
+                  </form>
+                  {{end}}
+
+                  {{if eq .CurrentSubTab "other"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/settings/other" class="form-grid">
+                    <label class="checkbox-field">
+                      <input type="checkbox" name="auto_upgrade" {{if .Detail.Agent.OtherConfig.AutoUpgrade}}checked{{end}} />
+                      <span>自动升级</span>
+                    </label>
+                    <label>
+                      <span>Timezone</span>
+                      <input type="text" name="timezone" value="{{.Detail.Agent.OtherConfig.Timezone}}" />
+                    </label>
+                    <label>
+                      <span>Language</span>
+                      <input type="text" name="language" value="{{.Detail.Agent.OtherConfig.Language}}" />
+                    </label>
+                    <label>
+                      <span>Theme</span>
+                      <input type="text" name="theme" value="{{.Detail.Agent.OtherConfig.Theme}}" />
+                    </label>
+                    <label>
+                      <span>Search Provider</span>
+                      <input type="text" name="search_provider" value="{{.Detail.Agent.OtherConfig.SearchProvider}}" />
+                    </label>
+                    <label class="span-2">
+                      <span>Default Prompt</span>
+                      <textarea name="default_prompt" rows="6">{{.Detail.Agent.OtherConfig.DefaultPrompt}}</textarea>
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存其他设置</button>
+                    </div>
+                  </form>
+                  {{end}}
+
+                  {{if eq .CurrentSubTab "config-file"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/settings/config-file" class="form-grid">
+                    <label class="span-2">
+                      <span>openclaw.json</span>
+                      <textarea class="code-area" name="content" rows="18">{{.Detail.Agent.ConfigFile.Content}}</textarea>
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存配置文件</button>
+                    </div>
+                  </form>
+                  {{end}}
+                </div>
+              </div>
+            </div>
+            {{end}}
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

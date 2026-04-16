@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="panel-page">
+    <div class="panel-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">1P</div>
+          <div>
+            <strong>OpenClaw Market</strong>
+            <p>AI 模块</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="{{if eq .CurrentSection "agents"}}active{{end}}" href="/ai/agents">智能体</a>
+          <a class="{{if eq .CurrentSection "accounts"}}active{{end}}" href="/ai/accounts">模型账号</a>
+        </nav>
+      </aside>
+
+      <main class="main-shell">
+        <header class="page-header">
+          <div>
+            <span class="page-tag">AI / Accounts</span>
+            <h1>模型账号</h1>
+            <p>对齐 1Panel 的模型账号页和模型池视图。</p>
+          </div>
+          <div class="header-actions">
+            <span class="user-badge">{{.CurrentUser.Email}}</span>
+            <form method="post" action="/logout">
+              <button class="button button-ghost" type="submit">退出</button>
+            </form>
+          </div>
+        </header>
+
+        {{if .Message}}<div class="alert success">{{.Message}}</div>{{end}}
+        {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
+
+        <section class="page-grid">
+          <div class="card form-card">
+            <div class="card-header">
+              <div>
+                <h2>创建模型账号</h2>
+                <p>对应 1Panel AgentAccount。</p>
+              </div>
+            </div>
+            <form method="post" action="/ai/accounts/create" class="form-grid">
+              <label>
+                <span>Provider</span>
+                <select name="provider" required>
+                  <option value="">请选择</option>
+                  {{range .ProviderCatalogs}}
+                  <option value="{{.Provider}}">{{.DisplayName}}</option>
+                  {{end}}
+                </select>
+              </label>
+              <label>
+                <span>名称</span>
+                <input type="text" name="name" required />
+              </label>
+              <label class="span-2">
+                <span>API Key</span>
+                <input type="text" name="api_key" required />
+              </label>
+              <label>
+                <span>Base URL</span>
+                <input type="text" name="base_url" placeholder="留空使用默认值" />
+              </label>
+              <label>
+                <span>API Type</span>
+                <input type="text" name="api_type" placeholder="responses / openai-completions" />
+              </label>
+              <label class="span-2">
+                <span>备注</span>
+                <input type="text" name="remark" />
+              </label>
+              <div class="form-actions span-2">
+                <button class="button" type="submit">创建模型账号</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>模型账号列表</h2>
+                <p>保持 1Panel 的表格信息结构。</p>
+              </div>
+            </div>
+            <table class="panel-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>Provider</th>
+                  <th>Base URL</th>
+                  <th>API Type</th>
+                  <th>校验</th>
+                  <th>模型数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{if .Accounts}}
+                  {{range .Accounts}}
+                  <tr>
+                    <td>
+                      <div class="table-primary">{{.Name}}</div>
+                      <div class="table-sub">{{.Remark}}</div>
+                    </td>
+                    <td>{{.Provider}}</td>
+                    <td class="mono">{{.BaseURL}}</td>
+                    <td>{{.APIType}}</td>
+                    <td><span class="status {{if .Verified}}green{{else}}gray{{end}}">{{if .Verified}}已校验{{else}}未校验{{end}}</span></td>
+                    <td>{{len .Models}}</td>
+                  </tr>
+                  {{end}}
+                {{else}}
+                  <tr>
+                    <td colspan="6" class="empty-row">还没有模型账号</td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="page-grid single">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>模型池</h2>
+                <p>对齐 1Panel 的模型池抽屉内容。</p>
+              </div>
+            </div>
+            <div class="model-pool-layout">
+              <div class="card subcard">
+                <div class="card-header">
+                  <div>
+                    <h3>追加账号模型</h3>
+                  </div>
+                </div>
+                <form method="post" action="/ai/accounts/models/create" class="form-grid">
+                  <label class="span-2">
+                    <span>账号</span>
+                    <select name="account_id" required>
+                      <option value="">请选择</option>
+                      {{range .Accounts}}
+                      <option value="{{.ID}}">{{.Name}} · {{.Provider}}</option>
+                      {{end}}
+                    </select>
+                  </label>
+                  <label>
+                    <span>模型 ID</span>
+                    <input type="text" name="model_id" required />
+                  </label>
+                  <label>
+                    <span>显示名</span>
+                    <input type="text" name="name" required />
+                  </label>
+                  <label>
+                    <span>上下文窗口</span>
+                    <input type="number" name="context_window" value="128000" />
+                  </label>
+                  <label>
+                    <span>最大输出</span>
+                    <input type="number" name="max_tokens" value="8192" />
+                  </label>
+                  <label>
+                    <span>输入类型</span>
+                    <input type="text" name="input_types" value="text,image" />
+                  </label>
+                  <label class="checkbox-field">
+                    <input type="checkbox" name="reasoning" />
+                    <span>推理模型</span>
+                  </label>
+                  <div class="form-actions span-2">
+                    <button class="button" type="submit">添加模型</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="pool-list">
+                {{range .Accounts}}
+                <div class="pool-block">
+                  <div class="pool-head">
+                    <strong>{{.Name}}</strong>
+                    <span>{{.Provider}}</span>
+                  </div>
+                  <table class="panel-table compact">
+                    <thead>
+                      <tr>
+                        <th>模型</th>
+                        <th>上下文</th>
+                        <th>最大输出</th>
+                        <th>输入</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{range .Models}}
+                      <tr>
+                        <td>{{.Name}}<div class="table-sub">{{.ID}}</div></td>
+                        <td>{{.ContextWindow}}</td>
+                        <td>{{.MaxTokens}}</td>
+                        <td>{{join .Input ", "}}</td>
+                      </tr>
+                      {{end}}
+                    </tbody>
+                  </table>
+                </div>
+                {{end}}
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

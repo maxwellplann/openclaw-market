@@ -29,16 +29,21 @@ type Server struct {
 }
 
 type viewData struct {
-	Title            string
-	CurrentUser      *User
-	ProviderCatalogs []ProviderCatalog
-	Accounts         []AgentAccount
-	Agents           []AgentDashboardItem
-	Message          string
-	Error            string
-	CurrentTab       string
-	Binding          *ChannelBinding
-	QRDataURI        string
+	Title             string
+	CurrentUser       *User
+	CurrentSection    string
+	CurrentTab        string
+	CurrentSubTab     string
+	ProviderCatalogs  []ProviderCatalog
+	Accounts          []AgentAccount
+	Agents            []AgentDashboardItem
+	Stats             DashboardStats
+	Detail            *AgentDetail
+	Message           string
+	Error             string
+	Binding           *ChannelBinding
+	ChannelBindingURL string
+	QRDataURI         string
 }
 
 func NewServer(storePath string) (*Server, error) {
@@ -54,7 +59,10 @@ func NewServerWithRuntime(storePath string, runtime Runtime) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	tpl, err := template.ParseFS(webFS, "web/templates/*.html")
+	tpl, err := template.New("").Funcs(template.FuncMap{
+		"join":     strings.Join,
+		"contains": strings.Contains,
+	}).ParseFS(webFS, "web/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -72,12 +80,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/register", s.handleRegister)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/logout", s.handleLogout)
-	mux.HandleFunc("/dashboard", s.handleDashboard)
+	mux.HandleFunc("/dashboard", s.handleDashboardRedirect)
+	mux.HandleFunc("/ai/accounts", s.handleAccountsPage)
 	mux.HandleFunc("/ai/accounts/create", s.handleCreateAccount)
 	mux.HandleFunc("/ai/accounts/models/create", s.handleCreateAccountModel)
+	mux.HandleFunc("/ai/agents", s.handleAgentsPage)
 	mux.HandleFunc("/ai/agents/create", s.handleCreateAgent)
-	mux.HandleFunc("/ai/agents/model/update", s.handleUpdateAgentModelConfig)
-	mux.HandleFunc("/ai/agents/connect", s.handleCreateBinding)
+	mux.HandleFunc("/ai/agents/", s.handleAgentRoutes)
 	mux.HandleFunc("/bindings/", s.handleBindingRoutes)
 	return mux
 }
@@ -88,7 +97,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user, _ := s.currentUser(r); user != nil {
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents", http.StatusSeeOther)
 		return
 	}
 	tab := r.URL.Query().Get("tab")
@@ -133,7 +142,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSession(w, user.ID)
-	http.Redirect(w, r, "/dashboard?message=注册成功，已自动登录", http.StatusSeeOther)
+	http.Redirect(w, r, "/ai/agents?message=注册成功，已自动登录", http.StatusSeeOther)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +162,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSession(w, user.ID)
-	http.Redirect(w, r, "/dashboard?message=登录成功", http.StatusSeeOther)
+	http.Redirect(w, r, "/ai/agents?message=登录成功", http.StatusSeeOther)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -165,17 +174,48 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/?message=已退出登录", http.StatusSeeOther)
 }
 
-func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDashboardRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/ai/agents", http.StatusSeeOther)
+}
+
+func (s *Server) handleAgentsPage(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.requireUser(w, r)
 	if !ok {
 		return
 	}
-	s.render(w, "dashboard.html", viewData{
-		Title:            "AI 控制台",
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.render(w, "agents.html", viewData{
+		Title:            "智能体",
 		CurrentUser:      user,
+		CurrentSection:   "agents",
 		ProviderCatalogs: s.store.ListProviderCatalogs(),
 		Accounts:         s.store.ListAccounts(user.ID),
 		Agents:           s.store.ListDashboardAgents(user.ID),
+		Stats:            s.store.Stats(user.ID),
+		Message:          r.URL.Query().Get("message"),
+		Error:            r.URL.Query().Get("error"),
+	})
+}
+
+func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.render(w, "accounts.html", viewData{
+		Title:            "模型账号",
+		CurrentUser:      user,
+		CurrentSection:   "accounts",
+		ProviderCatalogs: s.store.ListProviderCatalogs(),
+		Accounts:         s.store.ListAccounts(user.ID),
+		Stats:            s.store.Stats(user.ID),
 		Message:          r.URL.Query().Get("message"),
 		Error:            r.URL.Query().Get("error"),
 	})
@@ -191,7 +231,7 @@ func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/dashboard?error=表单解析失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?error=表单解析失败", http.StatusSeeOther)
 		return
 	}
 	provider := strings.TrimSpace(r.FormValue("provider"))
@@ -201,10 +241,10 @@ func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	apiType := strings.TrimSpace(r.FormValue("api_type"))
 	remark := strings.TrimSpace(r.FormValue("remark"))
 	if _, err := s.store.CreateAccount(user.ID, provider, name, apiKey, baseURL, apiType, remark); err != nil {
-		http.Redirect(w, r, "/dashboard?error=创建模型账号失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?error=创建模型账号失败", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/dashboard?message=模型账号已创建", http.StatusSeeOther)
+	http.Redirect(w, r, "/ai/accounts?message=模型账号已创建", http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateAccountModel(w http.ResponseWriter, r *http.Request) {
@@ -217,12 +257,12 @@ func (s *Server) handleCreateAccountModel(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/dashboard?error=表单解析失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?error=表单解析失败", http.StatusSeeOther)
 		return
 	}
 	accountID, err := strconv.ParseInt(r.FormValue("account_id"), 10, 64)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=无效的模型账号", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?error=无效的模型账号", http.StatusSeeOther)
 		return
 	}
 	contextWindow, _ := strconv.Atoi(r.FormValue("context_window"))
@@ -232,14 +272,14 @@ func (s *Server) handleCreateAccountModel(w http.ResponseWriter, r *http.Request
 		Name:          strings.TrimSpace(r.FormValue("name")),
 		ContextWindow: contextWindow,
 		MaxTokens:     maxTokens,
-		Input:         compactStrings(strings.Split(r.FormValue("input_types"), ",")),
+		Input:         splitFormList(r.FormValue("input_types")),
 		Reasoning:     r.FormValue("reasoning") == "on",
 	}
 	if _, err := s.store.CreateAccountModel(user.ID, accountID, model); err != nil {
-		http.Redirect(w, r, "/dashboard?error=新增模型失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/accounts?error=新增模型失败", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/dashboard?message=账号模型已添加", http.StatusSeeOther)
+	http.Redirect(w, r, "/ai/accounts?message=账号模型已添加", http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
@@ -252,18 +292,18 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/dashboard?error=表单解析失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=表单解析失败", http.StatusSeeOther)
 		return
 	}
 
 	accountID, err := strconv.ParseInt(r.FormValue("account_id"), 10, 64)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=请选择模型账号", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=请选择模型账号", http.StatusSeeOther)
 		return
 	}
 	account, ok := s.store.GetAccount(user.ID, accountID)
 	if !ok {
-		http.Redirect(w, r, "/dashboard?error=模型账号不存在", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=模型账号不存在", http.StatusSeeOther)
 		return
 	}
 	modelID := strings.TrimSpace(r.FormValue("model"))
@@ -276,7 +316,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if selected == nil {
-		http.Redirect(w, r, "/dashboard?error=请选择账号下的有效模型", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=请选择账号下的有效模型", http.StatusSeeOther)
 		return
 	}
 	webUIPort, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("web_ui_port")))
@@ -287,17 +327,21 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	if bridgePort == 0 {
 		bridgePort = webUIPort + 1000
 	}
-	allowedOrigins := compactStrings(strings.Split(r.FormValue("allowed_origins"), ","))
+	allowedOrigins := splitFormList(r.FormValue("allowed_origins"))
 	if len(allowedOrigins) == 0 {
 		allowedOrigins = []string{"http://127.0.0.1"}
 	}
 	token := strings.TrimSpace(r.FormValue("token"))
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		name = "OpenClaw Agent"
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), defaultProvisionTimeout())
 	defer cancel()
 	provision, err := s.runtime.ProvisionOpenClaw(ctx, ProvisionRequest{
 		UserID:         user.ID,
-		Name:           strings.TrimSpace(r.FormValue("name")),
+		Name:           name,
 		AgentType:      "openclaw",
 		WebUIPort:      webUIPort,
 		BridgePort:     bridgePort,
@@ -314,16 +358,16 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, ErrDockerUnavailable) {
-			http.Redirect(w, r, "/dashboard?error=Docker%20不可用，请先启动%20Docker%20daemon", http.StatusSeeOther)
+			http.Redirect(w, r, "/ai/agents?error=Docker%20不可用，请先启动%20Docker%20daemon", http.StatusSeeOther)
 			return
 		}
-		http.Redirect(w, r, "/dashboard?error="+template.URLQueryEscaper(err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error="+template.URLQueryEscaper(err.Error()), http.StatusSeeOther)
 		return
 	}
 
-	fallbacks := compactStrings(strings.Split(r.FormValue("fallbacks"), ","))
+	fallbacks := splitFormList(r.FormValue("fallbacks"))
 	agent := Agent{
-		Name:          strings.TrimSpace(r.FormValue("name")),
+		Name:          name,
 		Remark:        strings.TrimSpace(r.FormValue("remark")),
 		AgentType:     "openclaw",
 		Provider:      account.Provider,
@@ -334,80 +378,290 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		BaseURL:       account.BaseURL,
 		APIKey:        account.APIKey,
 		Token:         provision.GatewayToken,
-		Status:        "container_created",
+		Status:        "running",
+		Message:       "容器已创建",
 		AccountID:     account.ID,
 		ModelConfig: AgentModelConfig{
 			AccountID: account.ID,
 			Model:     selected.ID,
 			Fallbacks: fallbacks,
 		},
-		ConfigPath:          provision.ConfigPath,
-		WebUIPort:           provision.WebUIPort,
-		BridgePort:          provision.BridgePort,
-		AllowedOrigins:      allowedOrigins,
-		DockerContainerID:   provision.ContainerID,
-		DockerContainerName: provision.ContainerName,
-		DockerImage:         provision.Image,
-		DockerGatewayToken:  provision.GatewayToken,
-		DockerConfigDir:     provision.ConfigDir,
-		DockerWorkspaceDir:  provision.WorkspaceDir,
+		SecurityConfig: AgentSecurityConfig{
+			AllowedOrigins: allowedOrigins,
+		},
+		AppVersion:           "2026.4.14",
+		RestartPolicy:        valueOrDefault(strings.TrimSpace(r.FormValue("restart_policy")), "unless-stopped"),
+		AllowPort:            r.FormValue("allow_port") == "on",
+		SpecifyIP:            strings.TrimSpace(r.FormValue("specify_ip")),
+		ConfigPath:           provision.ConfigPath,
+		WebUIPort:            provision.WebUIPort,
+		BridgePort:           provision.BridgePort,
+		AllowedOrigins:       allowedOrigins,
+		DockerContainerID:    provision.ContainerID,
+		DockerContainerName:  provision.ContainerName,
+		DockerImage:          provision.Image,
+		DockerGatewayToken:   provision.GatewayToken,
+		DockerConfigDir:      provision.ConfigDir,
+		DockerWorkspaceDir:   provision.WorkspaceDir,
+		WebsitePrimaryDomain: strings.TrimSpace(r.FormValue("website_primary_domain")),
 	}
-	if _, err := s.store.CreateAgent(user.ID, agent); err != nil {
-		http.Redirect(w, r, "/dashboard?error=创建智能体失败", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/dashboard?message=智能体容器已创建", http.StatusSeeOther)
-}
-
-func (s *Server) handleUpdateAgentModelConfig(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.requireUser(w, r)
-	if !ok {
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/dashboard?error=表单解析失败", http.StatusSeeOther)
-		return
-	}
-	agentID, _ := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
-	accountID, _ := strconv.ParseInt(r.FormValue("account_id"), 10, 64)
-	modelID := strings.TrimSpace(r.FormValue("model"))
-	fallbacks := compactStrings(strings.Split(r.FormValue("fallbacks"), ","))
-	if err := s.store.UpdateAgentModelConfig(user.ID, agentID, accountID, modelID, fallbacks); err != nil {
-		http.Redirect(w, r, "/dashboard?error=更新智能体模型配置失败", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/dashboard?message=智能体模型配置已更新", http.StatusSeeOther)
-}
-
-func (s *Server) handleCreateBinding(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.requireUser(w, r)
-	if !ok {
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/dashboard?error=表单解析失败", http.StatusSeeOther)
-		return
-	}
-	agentID, err := strconv.ParseInt(r.FormValue("agent_id"), 10, 64)
+	created, err := s.store.CreateAgent(user.ID, agent)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=无效的智能体", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=创建智能体失败", http.StatusSeeOther)
 		return
 	}
-	channelName := strings.TrimSpace(r.FormValue("channel_name"))
-	if channelName == "" {
-		channelName = "微信"
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?message=智能体容器已创建", created.ID), http.StatusSeeOther)
+}
+
+func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return
 	}
+	trimmed := strings.TrimPrefix(r.URL.Path, "/ai/agents/")
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+	if len(parts) < 2 {
+		http.NotFound(w, r)
+		return
+	}
+	agentID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	switch {
+	case r.Method == http.MethodGet && parts[1] == "config":
+		s.handleAgentConfigPage(w, r, user, agentID)
+	case r.Method == http.MethodPost && parts[1] == "remark":
+		s.handleUpdateAgentRemark(w, r, user, agentID)
+	case r.Method == http.MethodPost && parts[1] == "status":
+		s.handleUpdateAgentStatus(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "token" && parts[2] == "reset":
+		s.handleResetAgentToken(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "settings" && parts[2] == "security":
+		s.handleUpdateAgentSecurityConfig(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "settings" && parts[2] == "other":
+		s.handleUpdateAgentOtherConfig(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "settings" && parts[2] == "config-file":
+		s.handleUpdateAgentConfigFile(w, r, user, agentID)
+	case r.Method == http.MethodPost && parts[1] == "model":
+		s.handleUpdateAgentModelConfig(w, r, user, agentID)
+	case r.Method == http.MethodPost && parts[1] == "skills":
+		s.handleUpdateAgentSkill(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "roles" && parts[2] == "create":
+		s.handleCreateAgentRole(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "roles" && parts[2] == "delete":
+		s.handleDeleteAgentRole(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "weixin":
+		s.handleUpdateWeixinChannel(w, r, user, agentID)
+	case r.Method == http.MethodPost && parts[1] == "connect":
+		s.handleCreateBindingForAgent(w, r, user, agentID)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) handleAgentConfigPage(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	detail, err := s.store.GetAgentDetail(user.ID, agentID)
+	if err != nil {
+		http.Redirect(w, r, "/ai/agents?error=智能体不存在", http.StatusSeeOther)
+		return
+	}
+	tab := r.URL.Query().Get("tab")
+	if tab == "" {
+		tab = "channels"
+	}
+	subTab := r.URL.Query().Get("setting")
+	if subTab == "" {
+		subTab = "security"
+	}
+	bindingURL := ""
+	if detail.Binding != nil {
+		bindingURL = "/bindings/" + detail.Binding.ScanToken
+	}
+	s.render(w, "agent_config.html", viewData{
+		Title:             detail.Agent.Name + " 配置",
+		CurrentUser:       user,
+		CurrentSection:    "agents",
+		CurrentTab:        tab,
+		CurrentSubTab:     subTab,
+		Accounts:          s.store.ListAccounts(user.ID),
+		Detail:            &detail,
+		ChannelBindingURL: bindingURL,
+		Message:           r.URL.Query().Get("message"),
+		Error:             r.URL.Query().Get("error"),
+	})
+}
+
+func (s *Server) handleUpdateAgentRemark(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "表单解析失败")
+		return
+	}
+	if err := s.store.UpdateAgentRemark(user.ID, agentID, r.FormValue("remark")); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "更新备注失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?message=备注已更新", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentStatus(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/ai/agents?error=表单解析失败", http.StatusSeeOther)
+		return
+	}
+	if err := s.store.UpdateAgentStatus(user.ID, agentID, strings.TrimSpace(r.FormValue("action"))); err != nil {
+		http.Redirect(w, r, "/ai/agents?error=状态更新失败", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/ai/agents?message=智能体状态已更新", http.StatusSeeOther)
+}
+
+func (s *Server) handleResetAgentToken(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if _, err := s.store.ResetAgentToken(user.ID, agentID); err != nil {
+		http.Redirect(w, r, "/ai/agents?error=重置 Token 失败", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/ai/agents?message=Token 已重置", http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentSecurityConfig(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "security", "表单解析失败")
+		return
+	}
+	if err := s.store.UpdateAgentSecurityConfig(user.ID, agentID, splitFormList(r.FormValue("allowed_origins"))); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "security", "保存安全设置失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=settings&setting=security&message=安全设置已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentOtherConfig(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "other", "表单解析失败")
+		return
+	}
+	cfg := AgentOtherConfig{
+		AutoUpgrade:    r.FormValue("auto_upgrade") == "on",
+		Timezone:       valueOrDefault(strings.TrimSpace(r.FormValue("timezone")), "Asia/Shanghai"),
+		Language:       valueOrDefault(strings.TrimSpace(r.FormValue("language")), "zh-CN"),
+		Theme:          valueOrDefault(strings.TrimSpace(r.FormValue("theme")), "light"),
+		SearchProvider: valueOrDefault(strings.TrimSpace(r.FormValue("search_provider")), "bing"),
+		DefaultPrompt:  strings.TrimSpace(r.FormValue("default_prompt")),
+	}
+	if err := s.store.UpdateAgentOtherConfig(user.ID, agentID, cfg); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "other", "保存其他设置失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=settings&setting=other&message=其他设置已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentConfigFile(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "config-file", "表单解析失败")
+		return
+	}
+	if err := s.store.UpdateAgentConfigFile(user.ID, agentID, r.FormValue("content")); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "settings", "config-file", "保存配置文件失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=settings&setting=config-file&message=配置文件已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentModelConfig(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "model", "", "表单解析失败")
+		return
+	}
+	accountID, _ := strconv.ParseInt(r.FormValue("account_id"), 10, 64)
+	if err := s.store.UpdateAgentModelConfig(user.ID, agentID, accountID, strings.TrimSpace(r.FormValue("model")), splitFormList(r.FormValue("fallbacks"))); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "model", "", "更新模型配置失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=model&message=模型配置已更新", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateAgentSkill(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "skills", "", "表单解析失败")
+		return
+	}
+	skill := AgentSkill{
+		Name:        strings.TrimSpace(r.FormValue("name")),
+		Description: strings.TrimSpace(r.FormValue("description")),
+		Source:      valueOrDefault(strings.TrimSpace(r.FormValue("source")), "custom"),
+		Enabled:     r.FormValue("enabled") == "on",
+	}
+	if err := s.store.UpsertAgentSkill(user.ID, agentID, skill); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "skills", "", "更新 Skill 失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=skills&message=Skill 已更新", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleCreateAgentRole(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "agent", "", "表单解析失败")
+		return
+	}
+	role := AgentRole{
+		Name:     strings.TrimSpace(r.FormValue("name")),
+		Prompt:   strings.TrimSpace(r.FormValue("prompt")),
+		Model:    strings.TrimSpace(r.FormValue("model")),
+		Channels: splitFormList(r.FormValue("channels")),
+	}
+	if err := s.store.CreateAgentRole(user.ID, agentID, role); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "agent", "", "新增角色失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=agent&message=角色已新增", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleDeleteAgentRole(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "agent", "", "表单解析失败")
+		return
+	}
+	roleID, _ := strconv.ParseInt(r.FormValue("role_id"), 10, 64)
+	if err := s.store.DeleteAgentRole(user.ID, agentID, roleID); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "agent", "", "删除角色失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=agent&message=角色已删除", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateWeixinChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "表单解析失败")
+		return
+	}
+	cfg := WeixinChannelConfig{
+		Enabled:        r.FormValue("enabled") == "on",
+		Mode:           strings.TrimSpace(r.FormValue("mode")),
+		AppID:          strings.TrimSpace(r.FormValue("app_id")),
+		AppSecret:      strings.TrimSpace(r.FormValue("app_secret")),
+		Token:          strings.TrimSpace(r.FormValue("token")),
+		EncodingAESKey: strings.TrimSpace(r.FormValue("encoding_aes_key")),
+		BoundChannel:   valueOrDefault(strings.TrimSpace(r.FormValue("bound_channel")), "微信服务号"),
+	}
+	if err := s.store.UpdateAgentWeixinChannel(user.ID, agentID, cfg); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "保存微信渠道失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&message=微信渠道已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleCreateBindingForAgent(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "表单解析失败")
+		return
+	}
+	channelName := valueOrDefault(strings.TrimSpace(r.FormValue("channel_name")), "微信服务号")
 	binding, err := s.store.CreateBinding(user.ID, agentID, channelName)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=生成渠道绑定二维码失败", http.StatusSeeOther)
+		s.redirectAgentConfigError(w, r, agentID, "channels", "", "生成绑定二维码失败")
 		return
 	}
 	http.Redirect(w, r, "/bindings/"+binding.ScanToken, http.StatusSeeOther)
@@ -424,28 +678,31 @@ func (s *Server) handleBindingRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPost {
-		if _, err := s.store.CompleteBinding(user.ID, token); err != nil {
-			http.Redirect(w, r, "/dashboard?error=绑定确认失败", http.StatusSeeOther)
+		binding, err := s.store.CompleteBinding(user.ID, token)
+		if err != nil {
+			http.Redirect(w, r, "/ai/agents?error=绑定确认失败", http.StatusSeeOther)
 			return
 		}
-		http.Redirect(w, r, "/dashboard?message=微信 channel 已连接", http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&message=微信渠道已连接", binding.AgentID), http.StatusSeeOther)
 		return
 	}
 	binding, err := s.store.GetBindingByToken(user.ID, token)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=未找到待绑定记录", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=未找到待绑定记录", http.StatusSeeOther)
 		return
 	}
 	png, err := qrcode.Encode(binding.QRContent, qrcode.Medium, 256)
 	if err != nil {
-		http.Redirect(w, r, "/dashboard?error=二维码生成失败", http.StatusSeeOther)
+		http.Redirect(w, r, "/ai/agents?error=二维码生成失败", http.StatusSeeOther)
 		return
 	}
 	s.render(w, "binding.html", viewData{
-		Title:       "微信扫码绑定",
-		CurrentUser: user,
-		Binding:     &binding,
-		QRDataURI:   "data:image/png;base64," + encodeBase64(png),
+		Title:             "微信扫码绑定",
+		CurrentUser:       user,
+		CurrentSection:    "agents",
+		Binding:           &binding,
+		ChannelBindingURL: fmt.Sprintf("/ai/agents/%d/config?tab=channels", binding.AgentID),
+		QRDataURI:         "data:image/png;base64," + encodeBase64(png),
 	})
 }
 
@@ -492,6 +749,28 @@ func (s *Server) render(w http.ResponseWriter, name string, data viewData) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(buf.Bytes())
+}
+
+func (s *Server) redirectAgentConfigError(w http.ResponseWriter, r *http.Request, agentID int64, tab, subTab, message string) {
+	target := fmt.Sprintf("/ai/agents/%d/config?tab=%s", agentID, template.URLQueryEscaper(tab))
+	if subTab != "" {
+		target += "&setting=" + template.URLQueryEscaper(subTab)
+	}
+	target += "&error=" + template.URLQueryEscaper(message)
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func splitFormList(raw string) []string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	return compactUniqueStrings(strings.Split(raw, ","))
+}
+
+func valueOrDefault(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func encodeBase64(raw []byte) string {

@@ -23,6 +23,7 @@ var (
 	ErrDockerUnavailable  = errors.New("docker unavailable")
 	ErrAccountNotFound    = errors.New("account not found")
 	ErrModelNotFound      = errors.New("model not found")
+	ErrRoleNotFound       = errors.New("role not found")
 )
 
 type storeState struct {
@@ -31,6 +32,7 @@ type storeState struct {
 	NextAccountID      int64            `json:"next_account_id"`
 	NextAccountModelID int64            `json:"next_account_model_id"`
 	NextBindingID      int64            `json:"next_binding_id"`
+	NextRoleID         int64            `json:"next_role_id"`
 	NextClaimID        int64            `json:"next_claim_id,omitempty"`
 	Users              []User           `json:"users"`
 	Models             []ModelProfile   `json:"models,omitempty"`
@@ -54,6 +56,7 @@ func NewStore(path string) (*Store, error) {
 			NextAccountID:      1,
 			NextAccountModelID: 1,
 			NextBindingID:      1,
+			NextRoleID:         1,
 		},
 	}
 
@@ -84,6 +87,9 @@ func (s *Store) ensureDefaults() {
 	if s.data.NextBindingID == 0 {
 		s.data.NextBindingID = 1
 	}
+	if s.data.NextRoleID == 0 {
+		s.data.NextRoleID = 1
+	}
 	if s.data.Accounts == nil {
 		s.data.Accounts = []AgentAccount{}
 	}
@@ -92,6 +98,9 @@ func (s *Store) ensureDefaults() {
 	}
 	if s.data.Bindings == nil {
 		s.data.Bindings = []ChannelBinding{}
+	}
+	for i := range s.data.Agents {
+		s.data.Agents[i] = normalizeAgent(s.data.Agents[i])
 	}
 }
 
@@ -137,6 +146,79 @@ func providerCatalogByKey(provider string) (ProviderCatalog, bool) {
 		}
 	}
 	return ProviderCatalog{}, false
+}
+
+func defaultSkills() []AgentSkill {
+	return []AgentSkill{
+		{Name: "browser", Description: "网页浏览与抓取", Source: "builtin", Enabled: true},
+		{Name: "workflow", Description: "任务编排与自动执行", Source: "builtin", Enabled: true},
+		{Name: "knowledge", Description: "知识库与检索增强", Source: "builtin", Enabled: false},
+	}
+}
+
+func defaultAgentOtherConfig() AgentOtherConfig {
+	return AgentOtherConfig{
+		AutoUpgrade:    true,
+		Timezone:       "Asia/Shanghai",
+		Language:       "zh-CN",
+		Theme:          "light",
+		SearchProvider: "bing",
+		DefaultPrompt:  "You are OpenClaw, a pragmatic AI agent.",
+	}
+}
+
+func defaultAgentConfigFile(agent Agent) AgentConfigFile {
+	content := fmt.Sprintf(`{
+  "provider": %q,
+  "model": %q,
+  "apiType": %q,
+  "baseURL": %q,
+  "webUIPort": %d,
+  "bridgePort": %d,
+  "allowedOrigins": [%s]
+}`, agent.Provider, agent.Model, agent.APIType, agent.BaseURL, agent.WebUIPort, agent.BridgePort, quotedList(agent.AllowedOrigins))
+	return AgentConfigFile{Content: content, UpdatedAt: time.Now()}
+}
+
+func normalizeAgent(agent Agent) Agent {
+	if agent.AppVersion == "" {
+		agent.AppVersion = "2026.4.14"
+	}
+	if agent.AgentType == "" {
+		agent.AgentType = "openclaw"
+	}
+	if agent.Status == "" {
+		agent.Status = "running"
+	}
+	if agent.RestartPolicy == "" {
+		agent.RestartPolicy = "unless-stopped"
+	}
+	if agent.SecurityConfig.AllowedOrigins == nil {
+		agent.SecurityConfig.AllowedOrigins = compactStrings(agent.AllowedOrigins)
+	}
+	if len(agent.SecurityConfig.AllowedOrigins) == 0 {
+		agent.SecurityConfig.AllowedOrigins = []string{"http://127.0.0.1"}
+	}
+	agent.AllowedOrigins = compactStrings(agent.SecurityConfig.AllowedOrigins)
+	if agent.OtherConfig.Timezone == "" {
+		agent.OtherConfig = defaultAgentOtherConfig()
+	}
+	if agent.Skills == nil {
+		agent.Skills = defaultSkills()
+	}
+	if agent.Roles == nil {
+		agent.Roles = []AgentRole{}
+	}
+	if agent.ConfigFile.Content == "" {
+		agent.ConfigFile = defaultAgentConfigFile(agent)
+	}
+	if agent.WeixinChannel.Mode == "" {
+		agent.WeixinChannel.Mode = "service"
+	}
+	if agent.UpdatedAt.IsZero() {
+		agent.UpdatedAt = agent.CreatedAt
+	}
+	return agent
 }
 
 func (s *Store) load() error {
@@ -224,6 +306,31 @@ func (s *Store) GetUserByID(userID int64) (User, bool) {
 	return User{}, false
 }
 
+func (s *Store) Stats(userID int64) DashboardStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	stats := DashboardStats{Providers: len(defaultProviderCatalogs())}
+	for _, account := range s.data.Accounts {
+		if account.UserID != userID {
+			continue
+		}
+		stats.Accounts++
+		stats.Models += len(account.Models)
+	}
+	for _, agent := range s.data.Agents {
+		if agent.UserID != userID {
+			continue
+		}
+		stats.Agents++
+	}
+	for _, binding := range s.data.Bindings {
+		if binding.UserID == userID && binding.Status == "connected" {
+			stats.Connected++
+		}
+	}
+	return stats
+}
+
 func (s *Store) ListProviderCatalogs() []ProviderCatalog {
 	return slices.Clone(defaultProviderCatalogs())
 }
@@ -302,6 +409,7 @@ func (s *Store) CreateAccountModel(userID, accountID int64, model AgentAccountMo
 		s.data.NextAccountModelID++
 		model.ID = strings.TrimSpace(model.ID)
 		model.Name = strings.TrimSpace(model.Name)
+		model.Input = compactStrings(model.Input)
 		s.data.Accounts[i].Models = append(s.data.Accounts[i].Models, model)
 		if err := s.saveLocked(); err != nil {
 			return AgentAccountModel{}, err
@@ -330,6 +438,8 @@ func (s *Store) CreateAgent(userID int64, agent Agent) (Agent, error) {
 	s.data.NextAgentID++
 	agent.UserID = userID
 	agent.CreatedAt = time.Now()
+	agent.UpdatedAt = agent.CreatedAt
+	agent = normalizeAgent(agent)
 	s.data.Agents = append(s.data.Agents, agent)
 	if err := s.saveLocked(); err != nil {
 		return Agent{}, err
@@ -354,10 +464,11 @@ func (s *Store) ListDashboardAgents(userID int64) []AgentDashboardItem {
 	defer s.mu.RUnlock()
 
 	items := make([]AgentDashboardItem, 0)
-	for _, agent := range s.data.Agents {
-		if agent.UserID != userID {
+	for _, raw := range s.data.Agents {
+		if raw.UserID != userID {
 			continue
 		}
+		agent := normalizeAgent(raw)
 		item := AgentDashboardItem{Agent: agent}
 		for i := range s.data.Accounts {
 			if s.data.Accounts[i].ID == agent.AccountID && s.data.Accounts[i].UserID == userID {
@@ -396,6 +507,33 @@ func (s *Store) ListDashboardAgents(userID int64) []AgentDashboardItem {
 	return items
 }
 
+func (s *Store) GetAgentDetail(userID, agentID int64) (AgentDetail, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, raw := range s.data.Agents {
+		if raw.ID != agentID || raw.UserID != userID {
+			continue
+		}
+		detail := AgentDetail{Agent: normalizeAgent(raw)}
+		for _, account := range s.data.Accounts {
+			if account.ID == raw.AccountID && account.UserID == userID {
+				copy := account
+				detail.Account = &copy
+				break
+			}
+		}
+		for _, binding := range s.data.Bindings {
+			if binding.AgentID == raw.ID && binding.UserID == userID {
+				copy := binding
+				detail.Binding = &copy
+				break
+			}
+		}
+		return detail, nil
+	}
+	return AgentDetail{}, ErrOpenClawNotFound
+}
+
 func (s *Store) UpdateAgentModelConfig(userID, agentID, accountID int64, modelID string, fallbacks []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -431,11 +569,210 @@ func (s *Store) UpdateAgentModelConfig(userID, agentID, accountID int64, modelID
 		s.data.Agents[i].ModelConfig = AgentModelConfig{
 			AccountID: accountID,
 			Model:     modelID,
-			Fallbacks: compactStrings(fallbacks),
+			Fallbacks: compactUniqueStrings(fallbacks),
 		}
+		s.data.Agents[i].UpdatedAt = time.Now()
+		s.data.Agents[i].ConfigFile = defaultAgentConfigFile(normalizeAgent(s.data.Agents[i]))
 		return s.saveLocked()
 	}
 	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentSecurityConfig(userID, agentID int64, allowedOrigins []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		origins := compactUniqueStrings(allowedOrigins)
+		if len(origins) == 0 {
+			origins = []string{"http://127.0.0.1"}
+		}
+		s.data.Agents[i].SecurityConfig.AllowedOrigins = origins
+		s.data.Agents[i].AllowedOrigins = origins
+		s.data.Agents[i].UpdatedAt = time.Now()
+		s.data.Agents[i].ConfigFile = defaultAgentConfigFile(normalizeAgent(s.data.Agents[i]))
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentOtherConfig(userID, agentID int64, cfg AgentOtherConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].OtherConfig = cfg
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentConfigFile(userID, agentID int64, content string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].ConfigFile = AgentConfigFile{Content: strings.TrimSpace(content), UpdatedAt: time.Now()}
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpsertAgentSkill(userID, agentID int64, skill AgentSkill) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		skill.Name = strings.TrimSpace(skill.Name)
+		skill.Description = strings.TrimSpace(skill.Description)
+		skill.Source = strings.TrimSpace(skill.Source)
+		for j := range s.data.Agents[i].Skills {
+			if s.data.Agents[i].Skills[j].Name == skill.Name {
+				s.data.Agents[i].Skills[j] = skill
+				s.data.Agents[i].UpdatedAt = time.Now()
+				return s.saveLocked()
+			}
+		}
+		s.data.Agents[i].Skills = append(s.data.Agents[i].Skills, skill)
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) CreateAgentRole(userID, agentID int64, role AgentRole) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		role.ID = s.data.NextRoleID
+		s.data.NextRoleID++
+		role.Name = strings.TrimSpace(role.Name)
+		role.Prompt = strings.TrimSpace(role.Prompt)
+		role.Model = strings.TrimSpace(role.Model)
+		role.Channels = compactUniqueStrings(role.Channels)
+		role.CreatedAt = time.Now()
+		s.data.Agents[i].Roles = append(s.data.Agents[i].Roles, role)
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) DeleteAgentRole(userID, agentID, roleID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		for j := range s.data.Agents[i].Roles {
+			if s.data.Agents[i].Roles[j].ID == roleID {
+				s.data.Agents[i].Roles = append(s.data.Agents[i].Roles[:j], s.data.Agents[i].Roles[j+1:]...)
+				s.data.Agents[i].UpdatedAt = time.Now()
+				return s.saveLocked()
+			}
+		}
+		return ErrRoleNotFound
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentWeixinChannel(userID, agentID int64, cfg WeixinChannelConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		cfg.Mode = strings.TrimSpace(cfg.Mode)
+		if cfg.Mode == "" {
+			cfg.Mode = "service"
+		}
+		cfg.AppID = strings.TrimSpace(cfg.AppID)
+		cfg.AppSecret = strings.TrimSpace(cfg.AppSecret)
+		cfg.Token = strings.TrimSpace(cfg.Token)
+		cfg.EncodingAESKey = strings.TrimSpace(cfg.EncodingAESKey)
+		cfg.BoundChannel = strings.TrimSpace(cfg.BoundChannel)
+		s.data.Agents[i].WeixinChannel = cfg
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentRemark(userID, agentID int64, remark string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].Remark = strings.TrimSpace(remark)
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentStatus(userID, agentID int64, action string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		switch action {
+		case "start":
+			s.data.Agents[i].Status = "running"
+			s.data.Agents[i].Message = "容器已启动"
+		case "stop":
+			s.data.Agents[i].Status = "stopped"
+			s.data.Agents[i].Message = "容器已停止"
+		case "restart":
+			s.data.Agents[i].Status = "running"
+			s.data.Agents[i].Message = "容器已重启"
+		default:
+			return fmt.Errorf("invalid action: %s", action)
+		}
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) ResetAgentToken(userID, agentID int64) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		token, err := randomToken(12)
+		if err != nil {
+			return "", err
+		}
+		s.data.Agents[i].Token = token
+		s.data.Agents[i].DockerGatewayToken = token
+		s.data.Agents[i].UpdatedAt = time.Now()
+		if err := s.saveLocked(); err != nil {
+			return "", err
+		}
+		return token, nil
+	}
+	return "", ErrOpenClawNotFound
 }
 
 func (s *Store) CreateBinding(userID, agentID int64, channelName string) (ChannelBinding, error) {
@@ -472,6 +809,12 @@ func (s *Store) CreateBinding(userID, agentID int64, channelName string) (Channe
 	if !replaced {
 		s.data.Bindings = append(s.data.Bindings, binding)
 	}
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID == agentID && s.data.Agents[i].UserID == userID {
+			s.data.Agents[i].WeixinChannel.BoundChannel = binding.ChannelName
+			break
+		}
+	}
 	if err := s.saveLocked(); err != nil {
 		return ChannelBinding{}, err
 	}
@@ -497,6 +840,13 @@ func (s *Store) CompleteBinding(userID int64, token string) (ChannelBinding, err
 			now := time.Now()
 			s.data.Bindings[i].Status = "connected"
 			s.data.Bindings[i].BoundAt = &now
+			for j := range s.data.Agents {
+				if s.data.Agents[j].ID == s.data.Bindings[i].AgentID && s.data.Agents[j].UserID == userID {
+					s.data.Agents[j].WeixinChannel.Enabled = true
+					s.data.Agents[j].UpdatedAt = now
+					break
+				}
+			}
 			if err := s.saveLocked(); err != nil {
 				return ChannelBinding{}, err
 			}
@@ -537,6 +887,27 @@ func compactStrings(values []string) []string {
 		}
 	}
 	return result
+}
+
+func compactUniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range compactStrings(values) {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func quotedList(values []string) string {
+	items := make([]string, 0, len(values))
+	for _, value := range compactStrings(values) {
+		items = append(items, fmt.Sprintf("%q", value))
+	}
+	return strings.Join(items, ", ")
 }
 
 func randomToken(n int) (string, error) {
