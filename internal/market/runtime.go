@@ -57,7 +57,7 @@ type DockerRuntime struct {
 func NewDockerRuntimeFromEnv() *DockerRuntime {
 	image := strings.TrimSpace(os.Getenv("OPENCLAW_AGENT_IMAGE"))
 	if image == "" {
-		image = "ghcr.io/openclaw/openclaw:latest"
+		image = "1panel/openclaw:2026.4.14"
 	}
 	return &DockerRuntime{image: image, gatewayPort: defaultGatewayPort}
 }
@@ -141,7 +141,7 @@ func (r FakeRuntime) ProvisionOpenClaw(_ context.Context, req ProvisionRequest) 
 		item.ContainerName = fmt.Sprintf("%s-u%d-%s", req.AgentType, req.UserID, slugify(req.Name))
 	}
 	if item.Image == "" {
-		item.Image = "ghcr.io/openclaw/openclaw:latest"
+		item.Image = "1panel/openclaw:2026.4.14"
 	}
 	if item.WebUIPort == 0 {
 		item.WebUIPort = req.WebUIPort
