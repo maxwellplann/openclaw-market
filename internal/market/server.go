@@ -793,6 +793,7 @@ func (s *Server) handleLoginWeixinChannel(w http.ResponseWriter, r *http.Request
 		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "初始化扫码任务失败")
 		return
 	}
+	_ = s.store.AppendBindingOutput(user.ID, binding.ScanToken, "微信扫码任务已启动，正在等待 OpenClaw 输出二维码或登录提示...\n")
 	_ = s.store.RecordAgentWeixinLogin(user.ID, agentID, "微信扫码任务已启动，正在等待 OpenClaw 输出二维码")
 	s.runWeixinLoginTask(user.ID, detail.Agent, binding.ScanToken)
 	http.Redirect(w, r, "/bindings/"+binding.ScanToken, http.StatusSeeOther)

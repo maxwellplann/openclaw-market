@@ -24,6 +24,9 @@
           <p><strong>状态：</strong>{{.Binding.Status}}</p>
           <p><strong>Token：</strong><span class="mono">{{.Binding.ScanToken}}</span></p>
         </div>
+        {{if eq .Binding.Status "running"}}
+        <div class="alert success">扫码任务已经启动，页面会每 3 秒自动刷新一次。</div>
+        {{end}}
         {{if .Binding.TaskError}}
         <div class="alert error">{{.Binding.TaskError}}</div>
         {{end}}
