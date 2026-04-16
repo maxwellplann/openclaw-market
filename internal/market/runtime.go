@@ -90,6 +90,9 @@ func (r *DockerRuntime) ProvisionOpenClaw(ctx context.Context, req ProvisionRequ
 	if err := os.MkdirAll(absWorkspaceDir, 0o755); err != nil {
 		return ProvisionedContainer{}, fmt.Errorf("mkdir workspace dir: %w", err)
 	}
+	if err := ensureAgentWritablePaths(absConfigDir, absWorkspaceDir); err != nil {
+		return ProvisionedContainer{}, fmt.Errorf("prepare writable dirs: %w", err)
+	}
 
 	gatewayToken := strings.TrimSpace(req.Token)
 	if gatewayToken == "" {
@@ -293,6 +296,9 @@ func (r *DockerRuntime) ManageWeixinPlugin(ctx context.Context, agent Agent, act
 	timeout := 10 * time.Minute
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if err := ensureAgentWritablePaths(agent.DockerConfigDir, agent.DockerWorkspaceDir); err != nil {
+		return AgentPluginStatus{}, err
+	}
 	if err := ensureContainerRunning(runCtx, agent.DockerContainerName); err != nil {
 		return AgentPluginStatus{}, err
 	}
@@ -348,6 +354,9 @@ func (r *DockerRuntime) ManageWeixinPlugin(ctx context.Context, agent Agent, act
 func (r *DockerRuntime) LoginWeixinChannel(ctx context.Context, agent Agent, onOutput func(string)) error {
 	runCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
+	if err := ensureAgentWritablePaths(agent.DockerConfigDir, agent.DockerWorkspaceDir); err != nil {
+		return err
+	}
 	if err := ensureContainerRunning(runCtx, agent.DockerContainerName); err != nil {
 		return err
 	}
@@ -663,6 +672,27 @@ func ensureContainerRunning(ctx context.Context, containerName string) error {
 	}
 	if _, err := runDockerCommand(ctx, "start", containerName); err != nil {
 		return fmt.Errorf("start container before plugin action: %w", err)
+	}
+	return nil
+}
+
+func ensureAgentWritablePaths(configDir, workspaceDir string) error {
+	dirs := []string{
+		strings.TrimSpace(configDir),
+		filepath.Join(strings.TrimSpace(configDir), "conf"),
+		filepath.Join(strings.TrimSpace(configDir), "conf", "extensions"),
+		strings.TrimSpace(workspaceDir),
+	}
+	for _, dir := range dirs {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			return err
+		}
+		if err := os.Chmod(dir, 0o777); err != nil {
+			return err
+		}
 	}
 	return nil
 }
