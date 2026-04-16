@@ -47,6 +47,9 @@ type viewData struct {
 	Error             string
 	ShowAgentCreate   bool
 	ShowAccountCreate bool
+	ShowAccountSettings bool
+	LogText           string
+	SelectedAccount   *AgentAccount
 	Binding           *ChannelBinding
 	ChannelBindingURL string
 	QRDataURI         string
@@ -229,23 +232,34 @@ func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	page := parsePage(r.URL.Query().Get("page"))
 	allAccounts := s.store.ListAccounts(user.ID)
+	var selectedAccount *AgentAccount
+	if settingsID := strings.TrimSpace(r.URL.Query().Get("settings")); settingsID != "" {
+		if id, err := strconv.ParseInt(settingsID, 10, 64); err == nil {
+			if account, ok := s.store.GetAccount(user.ID, id); ok {
+				copy := account
+				selectedAccount = &copy
+			}
+		}
+	}
 	filtered := s.store.FilterAccounts(user.ID, query)
 	paged, pageInfo := paginate(filtered, page, 8, func(target int) string {
 		return buildListURL("/ai/accounts", query, target)
 	})
 	s.render(w, "accounts.html", viewData{
-		Title:            "模型账号",
-		CurrentUser:      user,
-		CurrentSection:   "accounts",
-		ProviderCatalogs: s.store.ListProviderCatalogs(),
-		Accounts:         paged,
-		AccountOptions:   allAccounts,
-		Stats:            s.store.Stats(user.ID),
-		Query:            query,
-		PageInfo:         pageInfo,
-		Message:          r.URL.Query().Get("message"),
-		Error:            r.URL.Query().Get("error"),
+		Title:               "模型账号",
+		CurrentUser:         user,
+		CurrentSection:      "accounts",
+		ProviderCatalogs:    s.store.ListProviderCatalogs(),
+		Accounts:            paged,
+		AccountOptions:      allAccounts,
+		Stats:               s.store.Stats(user.ID),
+		Query:               query,
+		PageInfo:            pageInfo,
+		Message:             r.URL.Query().Get("message"),
+		Error:               r.URL.Query().Get("error"),
 		ShowAccountCreate: r.URL.Query().Get("create") == "1",
+		ShowAccountSettings: selectedAccount != nil,
+		SelectedAccount:     selectedAccount,
 	})
 }
 
@@ -293,6 +307,7 @@ func (s *Server) handleCreateAccountModel(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/ai/accounts?error=无效的模型账号", http.StatusSeeOther)
 		return
 	}
+	settingsURL := fmt.Sprintf("/ai/accounts?settings=%d", accountID)
 	contextWindow, _ := strconv.Atoi(r.FormValue("context_window"))
 	maxTokens, _ := strconv.Atoi(r.FormValue("max_tokens"))
 	model := AgentAccountModel{
@@ -304,10 +319,10 @@ func (s *Server) handleCreateAccountModel(w http.ResponseWriter, r *http.Request
 		Reasoning:     r.FormValue("reasoning") == "on",
 	}
 	if _, err := s.store.CreateAccountModel(user.ID, accountID, model); err != nil {
-		http.Redirect(w, r, "/ai/accounts?error=新增模型失败", http.StatusSeeOther)
+		http.Redirect(w, r, settingsURL+"&error=新增模型失败", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/ai/accounts?message=账号模型已添加", http.StatusSeeOther)
+	http.Redirect(w, r, settingsURL+"&message=账号模型已添加", http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
@@ -473,6 +488,8 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
+	case r.Method == http.MethodGet && parts[1] == "logs":
+		s.handleAgentLogsPage(w, r, user, agentID)
 	case r.Method == http.MethodGet && parts[1] == "config":
 		s.handleAgentConfigPage(w, r, user, agentID)
 	case r.Method == http.MethodPost && parts[1] == "remark":
@@ -608,6 +625,28 @@ func (s *Server) handleResetAgentToken(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	http.Redirect(w, r, "/ai/agents?message=Token 已重置", http.StatusSeeOther)
+}
+
+func (s *Server) handleAgentLogsPage(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	detail, err := s.store.GetAgentDetail(user.ID, agentID)
+	if err != nil {
+		http.Redirect(w, r, "/ai/agents?error=智能体不存在", http.StatusSeeOther)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	logText, err := s.runtime.ContainerLogs(ctx, detail.Agent.DockerContainerName, 200)
+	if err != nil {
+		http.Redirect(w, r, "/ai/agents?error="+template.URLQueryEscaper("读取日志失败: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	s.render(w, "agent_logs.html", viewData{
+		Title:          detail.Agent.Name + " 日志",
+		CurrentUser:    user,
+		CurrentSection: "agents",
+		Detail:         &detail,
+		LogText:        logText,
+	})
 }
 
 func (s *Server) handleUpdateAgentSecurityConfig(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {

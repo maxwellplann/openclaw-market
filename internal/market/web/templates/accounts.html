@@ -82,7 +82,7 @@
 	                      <details class="more-menu">
 	                        <summary class="button button-ghost button-small">更多</summary>
 	                        <div class="more-menu-panel">
-	                          <a class="more-menu-item" href="#model-pool">查看模型池</a>
+	                          <a class="more-menu-item" href="/ai/accounts?settings={{.ID}}{{if $.Query}}&q={{$.Query}}{{end}}">设置</a>
 	                          <a class="more-menu-item" href="/ai/agents?create=1">创建智能体</a>
 	                        </div>
 	                      </details>
@@ -158,13 +158,15 @@
         </div>
         {{end}}
 
-        <section class="page-grid single">
-          <div class="card" id="model-pool">
+        {{if .ShowAccountSettings}}
+        <div class="modal-overlay">
+          <div class="modal-card">
             <div class="card-header">
               <div>
-                <h2>模型池</h2>
-                <p>对齐 1Panel 的模型池抽屉内容。</p>
+                <h2>{{.SelectedAccount.Name}} 设置</h2>
+                <p>将模型池收敛到模型账号的设置入口，交互更接近 1Panel。</p>
               </div>
+              <a class="button button-ghost" href="/ai/accounts{{if .Query}}?q={{.Query}}{{end}}">关闭</a>
             </div>
             <div class="model-pool-layout">
               <div class="card subcard">
@@ -174,14 +176,10 @@
                   </div>
                 </div>
                 <form method="post" action="/ai/accounts/models/create" class="form-grid">
+                  <input type="hidden" name="account_id" value="{{.SelectedAccount.ID}}" />
                   <label class="span-2">
                     <span>账号</span>
-                    <select name="account_id" required>
-                      <option value="">请选择</option>
-                      {{range .AccountOptions}}
-                      <option value="{{.ID}}">{{.Name}} · {{.Provider}}</option>
-                      {{end}}
-                    </select>
+                    <input type="text" value="{{.SelectedAccount.Name}} · {{.SelectedAccount.Provider}}" readonly />
                   </label>
                   <label>
                     <span>模型 ID</span>
@@ -214,11 +212,10 @@
               </div>
 
               <div class="pool-list">
-                {{range .AccountOptions}}
                 <div class="pool-block">
                   <div class="pool-head">
-                    <strong>{{.Name}}</strong>
-                    <span>{{.Provider}}</span>
+                    <strong>{{.SelectedAccount.Name}}</strong>
+                    <span>{{.SelectedAccount.Provider}}</span>
                   </div>
                   <table class="panel-table compact">
                     <thead>
@@ -230,22 +227,28 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {{range .Models}}
-                      <tr>
-                        <td>{{.Name}}<div class="table-sub">{{.ID}}</div></td>
-                        <td>{{.ContextWindow}}</td>
-                        <td>{{.MaxTokens}}</td>
-                        <td>{{join .Input ", "}}</td>
-                      </tr>
+                      {{if .SelectedAccount.Models}}
+                        {{range .SelectedAccount.Models}}
+                        <tr>
+                          <td>{{.Name}}<div class="table-sub">{{.ID}}</div></td>
+                          <td>{{.ContextWindow}}</td>
+                          <td>{{.MaxTokens}}</td>
+                          <td>{{join .Input ", "}}</td>
+                        </tr>
+                        {{end}}
+                      {{else}}
+                        <tr>
+                          <td colspan="4" class="empty-row">当前账号还没有模型</td>
+                        </tr>
                       {{end}}
                     </tbody>
                   </table>
                 </div>
-                {{end}}
               </div>
             </div>
           </div>
-        </section>
+        </div>
+        {{end}}
       </main>
     </div>
   </body>
