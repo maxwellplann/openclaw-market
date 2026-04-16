@@ -91,7 +91,80 @@
                 <div class="subtab-content">
                   {{if eq .CurrentSubTab "weixin"}}
                   <div class="split-grid">
-                <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin" class="form-grid">
+                    <div class="side-stack">
+                      <div class="card subcard">
+                        <div class="card-header">
+                          <div>
+                            <h3>微信插件</h3>
+                            <p>对齐 1Panel OpenClaw 微信渠道：插件安装后再扫码连接。</p>
+                          </div>
+                        </div>
+                        <div class="plugin-status-grid">
+                          <div class="plugin-status-item">
+                            <span>安装状态</span>
+                            <strong>{{if .Detail.Agent.WeixinChannel.Plugin.Installed}}已安装{{else}}未安装{{end}}</strong>
+                          </div>
+                          <div class="plugin-status-item">
+                            <span>当前版本</span>
+                            <strong>{{if .Detail.Agent.WeixinChannel.Plugin.CurrentVersion}}{{.Detail.Agent.WeixinChannel.Plugin.CurrentVersion}}{{else}}-{{end}}</strong>
+                          </div>
+                          <div class="plugin-status-item">
+                            <span>最新版本</span>
+                            <strong>{{if .Detail.Agent.WeixinChannel.Plugin.LatestVersion}}{{.Detail.Agent.WeixinChannel.Plugin.LatestVersion}}{{else}}-{{end}}</strong>
+                          </div>
+                        </div>
+                        <div class="inline-actions">
+                          {{if not .Detail.Agent.WeixinChannel.Plugin.Installed}}
+                          <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin/plugin">
+                            <input type="hidden" name="action" value="install" />
+                            <button class="button" type="submit">安装插件</button>
+                          </form>
+                          {{else}}
+                          <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin/plugin">
+                            <input type="hidden" name="action" value="upgrade" />
+                            <button class="button button-ghost" type="submit">升级插件</button>
+                          </form>
+                          <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin/plugin">
+                            <input type="hidden" name="action" value="uninstall" />
+                            <button class="button button-ghost" type="submit">卸载插件</button>
+                          </form>
+                          {{end}}
+                        </div>
+                        {{if .Detail.Agent.WeixinChannel.Plugin.LastMessage}}
+                        <div class="alert plugin-alert {{if .Detail.Agent.WeixinChannel.Plugin.Installed}}success{{else}}error{{end}}">
+                          {{.Detail.Agent.WeixinChannel.Plugin.LastMessage}}
+                        </div>
+                        {{end}}
+                      </div>
+
+                      <div class="card subcard">
+                        <div class="card-header">
+                          <div>
+                            <h3>扫码连接</h3>
+                          </div>
+                        </div>
+                        <p class="muted">当前状态：{{if .Detail.Binding}}{{.Detail.Binding.Status}}{{else}}未创建{{end}}</p>
+                        <p class="muted">最低支持版本：2026.3.23</p>
+                        {{if .ChannelBindingURL}}
+                        <a class="button button-ghost full" href="{{.ChannelBindingURL}}">查看绑定页</a>
+                        {{end}}
+                        <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin/login">
+                          <button class="button full" type="submit" {{if not .Detail.Agent.WeixinChannel.Plugin.Installed}}disabled{{end}}>扫码连接</button>
+                        </form>
+                        <div class="info-note">安装插件后，通过扫码方式连接微信渠道。</div>
+                      </div>
+
+                      <div class="card subcard">
+                        <div class="card-header">
+                          <div>
+                            <h3>基础信息</h3>
+                          </div>
+                        </div>
+                        <p class="muted mono-small">Config: {{.Detail.Agent.ConfigPath}}</p>
+                        <p class="muted mono-small">Container: {{.Detail.Agent.DockerContainerID}}</p>
+                      </div>
+                    </div>
+                    <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin" class="form-grid">
                   <label class="checkbox-field">
                     <input type="checkbox" name="enabled" {{if .Detail.Agent.WeixinChannel.Enabled}}checked{{end}} />
                     <span>启用微信渠道</span>
@@ -124,38 +197,10 @@
                     <input type="text" name="bound_channel" value="{{.Detail.Agent.WeixinChannel.BoundChannel}}" placeholder="微信服务号" />
                   </label>
                   <div class="form-actions span-2">
-                    <button class="button" type="submit">保存渠道配置</button>
+                    <button class="button button-ghost" type="submit">保存高级配置</button>
                   </div>
-                </form>
-
-                <div class="side-stack">
-                  <div class="card subcard">
-                    <div class="card-header">
-                      <div>
-                        <h3>扫码绑定</h3>
-                      </div>
-                    </div>
-                    <p class="muted">当前状态：{{if .Detail.Binding}}{{.Detail.Binding.Status}}{{else}}未创建{{end}}</p>
-                    {{if .ChannelBindingURL}}
-                    <a class="button button-ghost full" href="{{.ChannelBindingURL}}">查看绑定页</a>
-                    {{end}}
-                    <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/connect">
-                      <input type="hidden" name="channel_name" value="{{if .Detail.Agent.WeixinChannel.BoundChannel}}{{.Detail.Agent.WeixinChannel.BoundChannel}}{{else}}微信服务号{{end}}" />
-                      <button class="button full" type="submit">生成二维码</button>
                     </form>
                   </div>
-
-                  <div class="card subcard">
-                    <div class="card-header">
-                      <div>
-                        <h3>基础信息</h3>
-                      </div>
-                    </div>
-                    <p class="muted mono-small">Config: {{.Detail.Agent.ConfigPath}}</p>
-                    <p class="muted mono-small">Container: {{.Detail.Agent.DockerContainerID}}</p>
-                  </div>
-                </div>
-              </div>
                   {{end}}
                   {{if eq .CurrentSubTab "telegram"}}
                   <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/telegram" class="form-grid">

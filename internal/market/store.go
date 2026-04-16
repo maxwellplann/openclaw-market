@@ -215,6 +215,15 @@ func normalizeAgent(agent Agent) Agent {
 	if agent.WeixinChannel.Mode == "" {
 		agent.WeixinChannel.Mode = "service"
 	}
+	if agent.WeixinChannel.Plugin.Type == "" {
+		agent.WeixinChannel.Plugin.Type = "weixin"
+	}
+	if agent.WeixinChannel.Plugin.CurrentVersion == "" && agent.WeixinChannel.Plugin.Installed {
+		agent.WeixinChannel.Plugin.CurrentVersion = "v2026.4.14"
+	}
+	if agent.WeixinChannel.Plugin.LatestVersion == "" {
+		agent.WeixinChannel.Plugin.LatestVersion = "v2026.4.14"
+	}
 	if agent.UpdatedAt.IsZero() {
 		agent.UpdatedAt = agent.CreatedAt
 	}
@@ -770,8 +779,89 @@ func (s *Store) UpdateAgentWeixinChannel(userID, agentID int64, cfg WeixinChanne
 		cfg.Token = strings.TrimSpace(cfg.Token)
 		cfg.EncodingAESKey = strings.TrimSpace(cfg.EncodingAESKey)
 		cfg.BoundChannel = strings.TrimSpace(cfg.BoundChannel)
+		if cfg.Plugin.Type == "" {
+			cfg.Plugin = s.data.Agents[i].WeixinChannel.Plugin
+		}
 		s.data.Agents[i].WeixinChannel = cfg
 		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentWeixinPlugin(userID, agentID int64, action string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		now := time.Now()
+		status := s.data.Agents[i].WeixinChannel.Plugin
+		if status.Type == "" {
+			status.Type = "weixin"
+		}
+		switch action {
+		case "install":
+			status.Installed = true
+			status.CurrentVersion = "v2026.4.14"
+			status.LatestVersion = "v2026.4.14"
+			status.Upgradable = false
+			status.LastAction = action
+			status.LastMessage = "微信插件安装完成"
+		case "upgrade":
+			status.Installed = true
+			status.CurrentVersion = "v2026.4.14"
+			status.LatestVersion = "v2026.4.14"
+			status.Upgradable = false
+			status.LastAction = action
+			status.LastMessage = "微信插件已升级到最新版本"
+		case "uninstall":
+			status.Installed = false
+			status.CurrentVersion = ""
+			status.Upgradable = false
+			status.LastAction = action
+			status.LastMessage = "微信插件已卸载"
+		default:
+			return fmt.Errorf("invalid plugin action: %s", action)
+		}
+		status.UpdatedAt = now
+		s.data.Agents[i].WeixinChannel.Plugin = status
+		s.data.Agents[i].UpdatedAt = now
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) MarkAgentWeixinPluginUpgradable(userID, agentID int64, latestVersion string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].WeixinChannel.Plugin.Type = "weixin"
+		s.data.Agents[i].WeixinChannel.Plugin.LatestVersion = strings.TrimSpace(latestVersion)
+		s.data.Agents[i].WeixinChannel.Plugin.Upgradable = true
+		s.data.Agents[i].WeixinChannel.Plugin.UpdatedAt = time.Now()
+		s.data.Agents[i].UpdatedAt = s.data.Agents[i].WeixinChannel.Plugin.UpdatedAt
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) RecordAgentWeixinLogin(userID, agentID int64, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].WeixinChannel.Plugin.Type = "weixin"
+		s.data.Agents[i].WeixinChannel.Plugin.LastAction = "login"
+		s.data.Agents[i].WeixinChannel.Plugin.LastMessage = strings.TrimSpace(message)
+		s.data.Agents[i].WeixinChannel.Plugin.UpdatedAt = time.Now()
+		s.data.Agents[i].UpdatedAt = s.data.Agents[i].WeixinChannel.Plugin.UpdatedAt
 		return s.saveLocked()
 	}
 	return ErrOpenClawNotFound

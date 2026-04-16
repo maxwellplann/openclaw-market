@@ -493,6 +493,10 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleDeleteAgentRole(w, r, user, agentID)
 	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "weixin":
 		s.handleUpdateWeixinChannel(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "channels" && parts[2] == "weixin" && parts[3] == "plugin":
+		s.handleUpdateWeixinPlugin(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 4 && parts[1] == "channels" && parts[2] == "weixin" && parts[3] == "login":
+		s.handleLoginWeixinChannel(w, r, user, agentID)
 	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "telegram":
 		s.handleUpdateTelegramChannel(w, r, user, agentID)
 	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "discord":
@@ -712,6 +716,47 @@ func (s *Server) handleUpdateWeixinChannel(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=weixin&message=微信渠道已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateWeixinPlugin(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "表单解析失败")
+		return
+	}
+	action := strings.TrimSpace(r.FormValue("action"))
+	if err := s.store.UpdateAgentWeixinPlugin(user.ID, agentID, action); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "更新微信插件失败")
+		return
+	}
+	message := "微信插件状态已更新"
+	switch action {
+	case "install":
+		message = "微信插件安装完成"
+	case "upgrade":
+		message = "微信插件已升级"
+	case "uninstall":
+		message = "微信插件已卸载"
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=weixin&message=%s", agentID, template.URLQueryEscaper(message)), http.StatusSeeOther)
+}
+
+func (s *Server) handleLoginWeixinChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	detail, err := s.store.GetAgentDetail(user.ID, agentID)
+	if err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "智能体不存在")
+		return
+	}
+	if !detail.Agent.WeixinChannel.Plugin.Installed {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "请先安装微信插件")
+		return
+	}
+	binding, err := s.store.CreateBinding(user.ID, agentID, valueOrDefault(detail.Agent.WeixinChannel.BoundChannel, "微信服务号"))
+	if err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "创建扫码登录任务失败")
+		return
+	}
+	_ = s.store.RecordAgentWeixinLogin(user.ID, agentID, "微信扫码登录任务已创建")
+	http.Redirect(w, r, "/bindings/"+binding.ScanToken, http.StatusSeeOther)
 }
 
 func (s *Server) handleUpdateTelegramChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {

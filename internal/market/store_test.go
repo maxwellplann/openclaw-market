@@ -117,4 +117,21 @@ func TestStoreAccountAgentBindingFlow(t *testing.T) {
 	if len(detail.Agent.SecurityConfig.AllowedOrigins) != 2 {
 		t.Fatalf("allowed origins = %d, want 2", len(detail.Agent.SecurityConfig.AllowedOrigins))
 	}
+
+	if err := store.UpdateAgentWeixinPlugin(user.ID, agent.ID, "install"); err != nil {
+		t.Fatalf("UpdateAgentWeixinPlugin(install) error = %v", err)
+	}
+	if err := store.RecordAgentWeixinLogin(user.ID, agent.ID, "微信扫码登录任务已创建"); err != nil {
+		t.Fatalf("RecordAgentWeixinLogin() error = %v", err)
+	}
+	detail, err = store.GetAgentDetail(user.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("GetAgentDetail() second error = %v", err)
+	}
+	if !detail.Agent.WeixinChannel.Plugin.Installed {
+		t.Fatalf("weixin plugin should be installed")
+	}
+	if detail.Agent.WeixinChannel.Plugin.LastAction != "login" {
+		t.Fatalf("weixin plugin last action = %s, want login", detail.Agent.WeixinChannel.Plugin.LastAction)
+	}
 }

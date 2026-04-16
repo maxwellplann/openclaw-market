@@ -92,13 +92,25 @@ type AgentRole struct {
 }
 
 type WeixinChannelConfig struct {
-	Enabled        bool   `json:"enabled"`
-	Mode           string `json:"mode"`
-	AppID          string `json:"app_id"`
-	AppSecret      string `json:"app_secret"`
-	Token          string `json:"token"`
-	EncodingAESKey string `json:"encoding_aes_key"`
-	BoundChannel   string `json:"bound_channel"`
+	Enabled        bool              `json:"enabled"`
+	Mode           string            `json:"mode"`
+	AppID          string            `json:"app_id"`
+	AppSecret      string            `json:"app_secret"`
+	Token          string            `json:"token"`
+	EncodingAESKey string            `json:"encoding_aes_key"`
+	BoundChannel   string            `json:"bound_channel"`
+	Plugin         AgentPluginStatus `json:"plugin"`
+}
+
+type AgentPluginStatus struct {
+	Type           string    `json:"type"`
+	Installed      bool      `json:"installed"`
+	CurrentVersion string    `json:"current_version"`
+	LatestVersion  string    `json:"latest_version"`
+	Upgradable     bool      `json:"upgradable"`
+	LastAction     string    `json:"last_action"`
+	LastMessage    string    `json:"last_message"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type TelegramChannelConfig struct {
