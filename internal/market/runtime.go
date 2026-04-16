@@ -474,7 +474,16 @@ func resolvePluginPackagePath(configDir, pluginType string) (string, error) {
 	if strings.TrimSpace(configDir) == "" {
 		return "", fmt.Errorf("empty config dir")
 	}
-	return filepath.Join(configDir, "conf", "extensions", pluginID, "package.json"), nil
+	candidates := []string{
+		filepath.Join(configDir, "extensions", pluginID, "package.json"),
+		filepath.Join(configDir, "conf", "extensions", pluginID, "package.json"),
+	}
+	for _, candidate := range candidates {
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			return candidate, nil
+		}
+	}
+	return candidates[0], nil
 }
 
 func buildPluginInstallScript(spec, pluginID string) string {
@@ -679,6 +688,7 @@ func ensureContainerRunning(ctx context.Context, containerName string) error {
 func ensureAgentWritablePaths(configDir, workspaceDir string) error {
 	dirs := []string{
 		strings.TrimSpace(configDir),
+		filepath.Join(strings.TrimSpace(configDir), "extensions"),
 		filepath.Join(strings.TrimSpace(configDir), "conf"),
 		filepath.Join(strings.TrimSpace(configDir), "conf", "extensions"),
 		strings.TrimSpace(workspaceDir),
