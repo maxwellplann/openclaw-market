@@ -19,7 +19,7 @@ go run ./cmd/openclaw-market
 
 默认监听 `:8080`，可通过 `OPENCLAW_MARKET_ADDR` 覆盖。
 
-创建容器前需要先启动本机 Docker daemon。默认镜像为 `ghcr.io/openclaw/openclaw:latest`，可通过 `OPENCLAW_AGENT_IMAGE` 覆盖。
+创建容器前需要先启动本机 Docker daemon。默认镜像为 `ghcr.io/openclaw/openclaw:latest`，该默认值与 1Panel 当前 OpenClaw 安装方式保持一致；也可通过 `OPENCLAW_AGENT_IMAGE` 覆盖。
 
 ## 设计说明
 
