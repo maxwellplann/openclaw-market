@@ -66,10 +66,18 @@ func (r *DockerRuntime) ProvisionOpenClaw(ctx context.Context, req ProvisionRequ
 	containerName := fmt.Sprintf("%s-u%d-%s", req.AgentType, req.UserID, slugify(req.Name))
 	configDir := filepath.Join(req.StorageDir, containerName, "config")
 	workspaceDir := filepath.Join(req.StorageDir, containerName, "workspace")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
+	absConfigDir, err := filepath.Abs(configDir)
+	if err != nil {
+		return ProvisionedContainer{}, fmt.Errorf("resolve config dir: %w", err)
+	}
+	absWorkspaceDir, err := filepath.Abs(workspaceDir)
+	if err != nil {
+		return ProvisionedContainer{}, fmt.Errorf("resolve workspace dir: %w", err)
+	}
+	if err := os.MkdirAll(absConfigDir, 0o755); err != nil {
 		return ProvisionedContainer{}, fmt.Errorf("mkdir config dir: %w", err)
 	}
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+	if err := os.MkdirAll(absWorkspaceDir, 0o755); err != nil {
 		return ProvisionedContainer{}, fmt.Errorf("mkdir workspace dir: %w", err)
 	}
 
@@ -95,8 +103,8 @@ func (r *DockerRuntime) ProvisionOpenClaw(ctx context.Context, req ProvisionRequ
 		"-e", fmt.Sprintf("MAX_TOKENS=%d", req.MaxTokens),
 		"-e", fmt.Sprintf("CONTEXT_WINDOW=%d", req.ContextWindow),
 		"-e", "ALLOWED_ORIGIN=" + firstAllowedOrigin(req.AllowedOrigins),
-		"-v", configDir + ":/home/node/.openclaw",
-		"-v", workspaceDir + ":/home/node/.openclaw/workspace",
+		"-v", absConfigDir + ":/home/node/.openclaw",
+		"-v", absWorkspaceDir + ":/home/node/.openclaw/workspace",
 		r.image,
 	}
 
@@ -118,9 +126,9 @@ func (r *DockerRuntime) ProvisionOpenClaw(ctx context.Context, req ProvisionRequ
 		WebUIPort:     req.WebUIPort,
 		BridgePort:    req.BridgePort,
 		GatewayToken:  gatewayToken,
-		ConfigDir:     configDir,
-		WorkspaceDir:  workspaceDir,
-		ConfigPath:    filepath.Join(configDir, "openclaw.json"),
+		ConfigDir:     absConfigDir,
+		WorkspaceDir:  absWorkspaceDir,
+		ConfigPath:    filepath.Join(absConfigDir, "openclaw.json"),
 	}, nil
 }
 
