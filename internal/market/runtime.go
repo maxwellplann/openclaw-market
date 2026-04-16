@@ -54,6 +54,7 @@ type ProvisionedContainer struct {
 type Runtime interface {
 	ProvisionOpenClaw(ctx context.Context, req ProvisionRequest) (ProvisionedContainer, error)
 	ChangeContainerState(ctx context.Context, containerName, action string) error
+	ContainerLogs(ctx context.Context, containerName string, tail int) (string, error)
 	CheckWeixinPlugin(ctx context.Context, agent Agent, checkLatest bool) (AgentPluginStatus, error)
 	ManageWeixinPlugin(ctx context.Context, agent Agent, action string) (AgentPluginStatus, error)
 	LoginWeixinChannel(ctx context.Context, agent Agent, onOutput func(string)) error
@@ -192,6 +193,13 @@ func (r FakeRuntime) ChangeContainerState(_ context.Context, _ string, _ string)
 	return r.Err
 }
 
+func (r FakeRuntime) ContainerLogs(_ context.Context, _ string, _ int) (string, error) {
+	if r.Err != nil {
+		return "", r.Err
+	}
+	return strings.Join(r.Logs, ""), nil
+}
+
 func (r FakeRuntime) CheckWeixinPlugin(_ context.Context, _ Agent, _ bool) (AgentPluginStatus, error) {
 	if r.Err != nil {
 		return AgentPluginStatus{}, r.Err
@@ -256,6 +264,20 @@ func (r *DockerRuntime) ChangeContainerState(ctx context.Context, containerName,
 		return fmt.Errorf("docker %s failed: %s", action, text)
 	}
 	return nil
+}
+
+func (r *DockerRuntime) ContainerLogs(ctx context.Context, containerName string, tail int) (string, error) {
+	if strings.TrimSpace(containerName) == "" {
+		return "", fmt.Errorf("empty container name")
+	}
+	if tail <= 0 {
+		tail = 200
+	}
+	out, err := runDockerCommand(ctx, "logs", "--tail", strconv.Itoa(tail), containerName)
+	if err != nil {
+		return "", err
+	}
+	return out, nil
 }
 
 func (r *DockerRuntime) CheckWeixinPlugin(ctx context.Context, agent Agent, checkLatest bool) (AgentPluginStatus, error) {

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="panel-page">
+    <div class="panel-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">1P</div>
+          <div>
+            <strong>OpenClaw Market</strong>
+            <p>AI 模块</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="active" href="/ai/agents">智能体</a>
+          <a href="/ai/accounts">模型账号</a>
+        </nav>
+      </aside>
+
+      <main class="main-shell">
+        <header class="page-header">
+          <div>
+            <span class="page-tag">AI / Agents / Logs</span>
+            <h1>{{.Detail.Agent.Name}}</h1>
+            <p>容器：{{.Detail.Agent.DockerContainerName}}</p>
+          </div>
+          <div class="header-actions">
+            <a class="button button-ghost" href="/ai/agents">返回列表</a>
+            <a class="button" href="/ai/agents/{{.Detail.Agent.ID}}/config">配置</a>
+          </div>
+        </header>
+
+        <section class="page-grid single">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>运行日志</h2>
+                <p>展示最近 200 行 Docker 日志。</p>
+              </div>
+              <a class="button button-ghost" href="/ai/agents/{{.Detail.Agent.ID}}/logs">刷新</a>
+            </div>
+            <pre class="task-log">{{if .LogText}}{{.LogText}}{{else}}暂无日志输出{{end}}</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

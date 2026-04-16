@@ -117,6 +117,18 @@
                         <summary class="button button-ghost button-small">更多</summary>
                         <div class="more-menu-panel">
                           <a class="more-menu-item" href="/ai/agents/{{.Agent.ID}}/config">配置</a>
+                          <a class="more-menu-item" href="/ai/agents/{{.Agent.ID}}/logs">查看日志</a>
+                          {{if eq .Agent.Status "running"}}
+                          <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
+                            <input type="hidden" name="action" value="stop" />
+                            <button class="more-menu-item" type="submit">停止</button>
+                          </form>
+                          {{else}}
+                          <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
+                            <input type="hidden" name="action" value="start" />
+                            <button class="more-menu-item" type="submit">启动</button>
+                          </form>
+                          {{end}}
                           <form method="post" action="/ai/agents/{{.Agent.ID}}/status">
                             <input type="hidden" name="action" value="restart" />
                             <button class="more-menu-item" type="submit">重启</button>
