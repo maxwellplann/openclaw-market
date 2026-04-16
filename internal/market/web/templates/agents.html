@@ -70,6 +70,10 @@
                 <h2>智能体列表</h2>
                 <p>保持 1Panel 的后台列表密度和信息结构。</p>
               </div>
+              <form method="get" action="/ai/agents" class="toolbar-search">
+                <input type="text" name="q" value="{{.Query}}" placeholder="搜索名称、模型、容器、域名" />
+                <button class="button button-ghost" type="submit">搜索</button>
+              </form>
             </div>
             <table class="panel-table">
               <thead>
@@ -128,6 +132,16 @@
                 {{end}}
               </tbody>
             </table>
+            <div class="pagination">
+              <span class="pagination-meta">共 {{.PageInfo.Total}} 条，第 {{.PageInfo.Page}} / {{.PageInfo.TotalPages}} 页</span>
+              <div class="pagination-links">
+                {{if .PageInfo.PrevURL}}<a href="{{.PageInfo.PrevURL}}">上一页</a>{{end}}
+                {{range .PageInfo.Pages}}
+                <a class="{{if .Active}}active{{end}}" href="{{.URL}}">{{.Number}}</a>
+                {{end}}
+                {{if .PageInfo.NextURL}}<a href="{{.PageInfo.NextURL}}">下一页</a>{{end}}
+              </div>
+            </div>
           </div>
 
           <div class="card form-card">
@@ -146,7 +160,7 @@
                 <span>模型账号</span>
                 <select name="account_id" required>
                   <option value="">请选择账号</option>
-                  {{range .Accounts}}
+                  {{range .AccountOptions}}
                   <option value="{{.ID}}">{{.Name}} · {{.Provider}}</option>
                   {{end}}
                 </select>
@@ -155,7 +169,7 @@
                 <span>主模型</span>
                 <select name="model" required>
                   <option value="">请选择模型</option>
-                  {{range .Accounts}}
+                  {{range .AccountOptions}}
                   <optgroup label="{{.Name}}">
                     {{range .Models}}
                     <option value="{{.ID}}">{{.Name}} ({{.ID}})</option>

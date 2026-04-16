@@ -77,11 +77,20 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <h2>微信渠道</h2>
-                  <p>保留 1Panel AI 模块的渠道配置和扫码连接入口。</p>
+                  <h2>渠道配置</h2>
+                  <p>补齐多渠道配置和扫码连接入口。</p>
                 </div>
               </div>
-              <div class="split-grid">
+              <div class="settings-layout">
+                <nav class="subtabs">
+                  <a class="{{if eq .CurrentSubTab "weixin"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=channels&setting=weixin">微信</a>
+                  <a class="{{if eq .CurrentSubTab "telegram"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=channels&setting=telegram">Telegram</a>
+                  <a class="{{if eq .CurrentSubTab "discord"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=channels&setting=discord">Discord</a>
+                  <a class="{{if eq .CurrentSubTab "feishu"}}active{{end}}" href="/ai/agents/{{.Detail.Agent.ID}}/config?tab=channels&setting=feishu">飞书</a>
+                </nav>
+                <div class="subtab-content">
+                  {{if eq .CurrentSubTab "weixin"}}
+                  <div class="split-grid">
                 <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/weixin" class="form-grid">
                   <label class="checkbox-field">
                     <input type="checkbox" name="enabled" {{if .Detail.Agent.WeixinChannel.Enabled}}checked{{end}} />
@@ -145,6 +154,90 @@
                     <p class="muted mono-small">Config: {{.Detail.Agent.ConfigPath}}</p>
                     <p class="muted mono-small">Container: {{.Detail.Agent.DockerContainerID}}</p>
                   </div>
+                </div>
+              </div>
+                  {{end}}
+                  {{if eq .CurrentSubTab "telegram"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/telegram" class="form-grid">
+                    <label class="checkbox-field">
+                      <input type="checkbox" name="enabled" {{if .Detail.Agent.TelegramChannel.Enabled}}checked{{end}} />
+                      <span>启用 Telegram</span>
+                    </label>
+                    <label>
+                      <span>Bot Name</span>
+                      <input type="text" name="bot_name" value="{{.Detail.Agent.TelegramChannel.BotName}}" />
+                    </label>
+                    <label class="span-2">
+                      <span>Bot Token</span>
+                      <input type="text" name="bot_token" value="{{.Detail.Agent.TelegramChannel.BotToken}}" />
+                    </label>
+                    <label>
+                      <span>Webhook URL</span>
+                      <input type="text" name="webhook_url" value="{{.Detail.Agent.TelegramChannel.WebhookURL}}" />
+                    </label>
+                    <label>
+                      <span>Chat ID</span>
+                      <input type="text" name="chat_id" value="{{.Detail.Agent.TelegramChannel.ChatID}}" />
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存 Telegram 配置</button>
+                    </div>
+                  </form>
+                  {{end}}
+                  {{if eq .CurrentSubTab "discord"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/discord" class="form-grid">
+                    <label class="checkbox-field">
+                      <input type="checkbox" name="enabled" {{if .Detail.Agent.DiscordChannel.Enabled}}checked{{end}} />
+                      <span>启用 Discord</span>
+                    </label>
+                    <label>
+                      <span>Application</span>
+                      <input type="text" name="application" value="{{.Detail.Agent.DiscordChannel.Application}}" />
+                    </label>
+                    <label class="span-2">
+                      <span>Bot Token</span>
+                      <input type="text" name="bot_token" value="{{.Detail.Agent.DiscordChannel.BotToken}}" />
+                    </label>
+                    <label>
+                      <span>Guild ID</span>
+                      <input type="text" name="guild_id" value="{{.Detail.Agent.DiscordChannel.GuildID}}" />
+                    </label>
+                    <label>
+                      <span>Webhook URL</span>
+                      <input type="text" name="webhook_url" value="{{.Detail.Agent.DiscordChannel.WebhookURL}}" />
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存 Discord 配置</button>
+                    </div>
+                  </form>
+                  {{end}}
+                  {{if eq .CurrentSubTab "feishu"}}
+                  <form method="post" action="/ai/agents/{{.Detail.Agent.ID}}/channels/feishu" class="form-grid">
+                    <label class="checkbox-field">
+                      <input type="checkbox" name="enabled" {{if .Detail.Agent.FeishuChannel.Enabled}}checked{{end}} />
+                      <span>启用飞书</span>
+                    </label>
+                    <label>
+                      <span>App ID</span>
+                      <input type="text" name="app_id" value="{{.Detail.Agent.FeishuChannel.AppID}}" />
+                    </label>
+                    <label>
+                      <span>App Secret</span>
+                      <input type="text" name="app_secret" value="{{.Detail.Agent.FeishuChannel.AppSecret}}" />
+                    </label>
+                    <label>
+                      <span>Encrypt Key</span>
+                      <input type="text" name="encrypt_key" value="{{.Detail.Agent.FeishuChannel.EncryptKey}}" />
+                    </label>
+                    <label class="span-2">
+                      <span>Verification Token</span>
+                      <input type="text" name="verification" value="{{.Detail.Agent.FeishuChannel.Verification}}" />
+                    </label>
+                    <div class="form-actions span-2">
+                      <button class="button" type="submit">保存飞书配置</button>
+                    </div>
+                  </form>
+                  {{end}}
                 </div>
               </div>
             </div>

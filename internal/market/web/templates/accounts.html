@@ -90,6 +90,10 @@
                 <h2>模型账号列表</h2>
                 <p>保持 1Panel 的表格信息结构。</p>
               </div>
+              <form method="get" action="/ai/accounts" class="toolbar-search">
+                <input type="text" name="q" value="{{.Query}}" placeholder="搜索名称、Provider、备注、Base URL" />
+                <button class="button button-ghost" type="submit">搜索</button>
+              </form>
             </div>
             <table class="panel-table">
               <thead>
@@ -124,6 +128,16 @@
                 {{end}}
               </tbody>
             </table>
+            <div class="pagination">
+              <span class="pagination-meta">共 {{.PageInfo.Total}} 条，第 {{.PageInfo.Page}} / {{.PageInfo.TotalPages}} 页</span>
+              <div class="pagination-links">
+                {{if .PageInfo.PrevURL}}<a href="{{.PageInfo.PrevURL}}">上一页</a>{{end}}
+                {{range .PageInfo.Pages}}
+                <a class="{{if .Active}}active{{end}}" href="{{.URL}}">{{.Number}}</a>
+                {{end}}
+                {{if .PageInfo.NextURL}}<a href="{{.PageInfo.NextURL}}">下一页</a>{{end}}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -147,7 +161,7 @@
                     <span>账号</span>
                     <select name="account_id" required>
                       <option value="">请选择</option>
-                      {{range .Accounts}}
+                      {{range .AccountOptions}}
                       <option value="{{.ID}}">{{.Name}} · {{.Provider}}</option>
                       {{end}}
                     </select>
@@ -183,7 +197,7 @@
               </div>
 
               <div class="pool-list">
-                {{range .Accounts}}
+                {{range .AccountOptions}}
                 <div class="pool-block">
                   <div class="pool-head">
                     <strong>{{.Name}}</strong>

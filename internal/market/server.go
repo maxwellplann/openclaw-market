@@ -13,6 +13,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
@@ -36,8 +37,11 @@ type viewData struct {
 	CurrentSubTab     string
 	ProviderCatalogs  []ProviderCatalog
 	Accounts          []AgentAccount
+	AccountOptions    []AgentAccount
 	Agents            []AgentDashboardItem
 	Stats             DashboardStats
+	Query             string
+	PageInfo          PageInfo
 	Detail            *AgentDetail
 	Message           string
 	Error             string
@@ -187,14 +191,24 @@ func (s *Server) handleAgentsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	page := parsePage(r.URL.Query().Get("page"))
+	allAccounts := s.store.ListAccounts(user.ID)
+	filtered := s.store.FilterDashboardAgents(user.ID, query)
+	paged, pageInfo := paginate(filtered, page, 10, func(target int) string {
+		return buildListURL("/ai/agents", query, target)
+	})
 	s.render(w, "agents.html", viewData{
 		Title:            "智能体",
 		CurrentUser:      user,
 		CurrentSection:   "agents",
 		ProviderCatalogs: s.store.ListProviderCatalogs(),
-		Accounts:         s.store.ListAccounts(user.ID),
-		Agents:           s.store.ListDashboardAgents(user.ID),
+		Accounts:         allAccounts,
+		AccountOptions:   allAccounts,
+		Agents:           paged,
 		Stats:            s.store.Stats(user.ID),
+		Query:            query,
+		PageInfo:         pageInfo,
 		Message:          r.URL.Query().Get("message"),
 		Error:            r.URL.Query().Get("error"),
 	})
@@ -209,13 +223,23 @@ func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	page := parsePage(r.URL.Query().Get("page"))
+	allAccounts := s.store.ListAccounts(user.ID)
+	filtered := s.store.FilterAccounts(user.ID, query)
+	paged, pageInfo := paginate(filtered, page, 8, func(target int) string {
+		return buildListURL("/ai/accounts", query, target)
+	})
 	s.render(w, "accounts.html", viewData{
 		Title:            "模型账号",
 		CurrentUser:      user,
 		CurrentSection:   "accounts",
 		ProviderCatalogs: s.store.ListProviderCatalogs(),
-		Accounts:         s.store.ListAccounts(user.ID),
+		Accounts:         paged,
+		AccountOptions:   allAccounts,
 		Stats:            s.store.Stats(user.ID),
+		Query:            query,
+		PageInfo:         pageInfo,
 		Message:          r.URL.Query().Get("message"),
 		Error:            r.URL.Query().Get("error"),
 	})
@@ -455,6 +479,12 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleDeleteAgentRole(w, r, user, agentID)
 	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "weixin":
 		s.handleUpdateWeixinChannel(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "telegram":
+		s.handleUpdateTelegramChannel(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "discord":
+		s.handleUpdateDiscordChannel(w, r, user, agentID)
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[1] == "channels" && parts[2] == "feishu":
+		s.handleUpdateFeishuChannel(w, r, user, agentID)
 	case r.Method == http.MethodPost && parts[1] == "connect":
 		s.handleCreateBindingForAgent(w, r, user, agentID)
 	default:
@@ -474,7 +504,11 @@ func (s *Server) handleAgentConfigPage(w http.ResponseWriter, r *http.Request, u
 	}
 	subTab := r.URL.Query().Get("setting")
 	if subTab == "" {
-		subTab = "security"
+		if tab == "channels" {
+			subTab = "weixin"
+		} else {
+			subTab = "security"
+		}
 	}
 	bindingURL := ""
 	if detail.Binding != nil {
@@ -487,6 +521,7 @@ func (s *Server) handleAgentConfigPage(w http.ResponseWriter, r *http.Request, u
 		CurrentTab:        tab,
 		CurrentSubTab:     subTab,
 		Accounts:          s.store.ListAccounts(user.ID),
+		AccountOptions:    s.store.ListAccounts(user.ID),
 		Detail:            &detail,
 		ChannelBindingURL: bindingURL,
 		Message:           r.URL.Query().Get("message"),
@@ -511,7 +546,19 @@ func (s *Server) handleUpdateAgentStatus(w http.ResponseWriter, r *http.Request,
 		http.Redirect(w, r, "/ai/agents?error=表单解析失败", http.StatusSeeOther)
 		return
 	}
-	if err := s.store.UpdateAgentStatus(user.ID, agentID, strings.TrimSpace(r.FormValue("action"))); err != nil {
+	action := strings.TrimSpace(r.FormValue("action"))
+	detail, err := s.store.GetAgentDetail(user.ID, agentID)
+	if err != nil {
+		http.Redirect(w, r, "/ai/agents?error=智能体不存在", http.StatusSeeOther)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := s.runtime.ChangeContainerState(ctx, detail.Agent.DockerContainerName, action); err != nil {
+		http.Redirect(w, r, "/ai/agents?error="+template.URLQueryEscaper(err.Error()), http.StatusSeeOther)
+		return
+	}
+	if err := s.store.UpdateAgentStatus(user.ID, agentID, action); err != nil {
 		http.Redirect(w, r, "/ai/agents?error=状态更新失败", http.StatusSeeOther)
 		return
 	}
@@ -647,10 +694,67 @@ func (s *Server) handleUpdateWeixinChannel(w http.ResponseWriter, r *http.Reques
 		BoundChannel:   valueOrDefault(strings.TrimSpace(r.FormValue("bound_channel")), "微信服务号"),
 	}
 	if err := s.store.UpdateAgentWeixinChannel(user.ID, agentID, cfg); err != nil {
-		s.redirectAgentConfigError(w, r, agentID, "channels", "", "保存微信渠道失败")
+		s.redirectAgentConfigError(w, r, agentID, "channels", "weixin", "保存微信渠道失败")
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&message=微信渠道已保存", agentID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=weixin&message=微信渠道已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateTelegramChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "telegram", "表单解析失败")
+		return
+	}
+	cfg := TelegramChannelConfig{
+		Enabled:    r.FormValue("enabled") == "on",
+		BotToken:   strings.TrimSpace(r.FormValue("bot_token")),
+		BotName:    strings.TrimSpace(r.FormValue("bot_name")),
+		WebhookURL: strings.TrimSpace(r.FormValue("webhook_url")),
+		ChatID:     strings.TrimSpace(r.FormValue("chat_id")),
+	}
+	if err := s.store.UpdateAgentTelegramChannel(user.ID, agentID, cfg); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "telegram", "保存 Telegram 渠道失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=telegram&message=Telegram 渠道已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateDiscordChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "discord", "表单解析失败")
+		return
+	}
+	cfg := DiscordChannelConfig{
+		Enabled:     r.FormValue("enabled") == "on",
+		BotToken:    strings.TrimSpace(r.FormValue("bot_token")),
+		Application: strings.TrimSpace(r.FormValue("application")),
+		GuildID:     strings.TrimSpace(r.FormValue("guild_id")),
+		WebhookURL:  strings.TrimSpace(r.FormValue("webhook_url")),
+	}
+	if err := s.store.UpdateAgentDiscordChannel(user.ID, agentID, cfg); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "discord", "保存 Discord 渠道失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=discord&message=Discord 渠道已保存", agentID), http.StatusSeeOther)
+}
+
+func (s *Server) handleUpdateFeishuChannel(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
+	if err := r.ParseForm(); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "feishu", "表单解析失败")
+		return
+	}
+	cfg := FeishuChannelConfig{
+		Enabled:      r.FormValue("enabled") == "on",
+		AppID:        strings.TrimSpace(r.FormValue("app_id")),
+		AppSecret:    strings.TrimSpace(r.FormValue("app_secret")),
+		EncryptKey:   strings.TrimSpace(r.FormValue("encrypt_key")),
+		Verification: strings.TrimSpace(r.FormValue("verification")),
+	}
+	if err := s.store.UpdateAgentFeishuChannel(user.ID, agentID, cfg); err != nil {
+		s.redirectAgentConfigError(w, r, agentID, "channels", "feishu", "保存飞书渠道失败")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/ai/agents/%d/config?tab=channels&setting=feishu&message=飞书渠道已保存", agentID), http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateBindingForAgent(w http.ResponseWriter, r *http.Request, user *User, agentID int64) {
@@ -764,6 +868,80 @@ func splitFormList(raw string) []string {
 	raw = strings.ReplaceAll(raw, "\r\n", "\n")
 	raw = strings.ReplaceAll(raw, "\n", ",")
 	return compactUniqueStrings(strings.Split(raw, ","))
+}
+
+func parsePage(raw string) int {
+	page, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || page < 1 {
+		return 1
+	}
+	return page
+}
+
+func buildListURL(basePath, query string, page int) string {
+	if page < 1 {
+		page = 1
+	}
+	values := make([]string, 0, 2)
+	if strings.TrimSpace(query) != "" {
+		values = append(values, "q="+template.URLQueryEscaper(query))
+	}
+	if page > 1 {
+		values = append(values, "page="+strconv.Itoa(page))
+	}
+	if len(values) == 0 {
+		return basePath
+	}
+	return basePath + "?" + strings.Join(values, "&")
+}
+
+func paginate[T any](items []T, page, pageSize int, buildURL func(page int) string) ([]T, PageInfo) {
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	total := len(items)
+	totalPages := total / pageSize
+	if total%pageSize != 0 {
+		totalPages++
+	}
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	pageItems := items[start:end]
+	info := PageInfo{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+	}
+	if page > 1 {
+		info.PrevURL = buildURL(page - 1)
+	}
+	if page < totalPages {
+		info.NextURL = buildURL(page + 1)
+	}
+	for i := 1; i <= totalPages; i++ {
+		info.Pages = append(info.Pages, PageLink{
+			Number: i,
+			URL:    buildURL(i),
+			Active: i == page,
+		})
+	}
+	return pageItems, info
 }
 
 func valueOrDefault(value, fallback string) string {

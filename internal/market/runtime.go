@@ -47,6 +47,7 @@ type ProvisionedContainer struct {
 
 type Runtime interface {
 	ProvisionOpenClaw(ctx context.Context, req ProvisionRequest) (ProvisionedContainer, error)
+	ChangeContainerState(ctx context.Context, containerName, action string) error
 }
 
 type DockerRuntime struct {
@@ -135,6 +136,7 @@ func (r *DockerRuntime) ProvisionOpenClaw(ctx context.Context, req ProvisionRequ
 type FakeRuntime struct {
 	Provision ProvisionedContainer
 	Err       error
+	Actions   []string
 }
 
 func (r FakeRuntime) ProvisionOpenClaw(_ context.Context, req ProvisionRequest) (ProvisionedContainer, error) {
@@ -170,6 +172,29 @@ func (r FakeRuntime) ProvisionOpenClaw(_ context.Context, req ProvisionRequest) 
 		item.ConfigPath = filepath.Join(item.ConfigDir, "openclaw.json")
 	}
 	return item, nil
+}
+
+func (r FakeRuntime) ChangeContainerState(_ context.Context, _ string, _ string) error {
+	return r.Err
+}
+
+func (r *DockerRuntime) ChangeContainerState(ctx context.Context, containerName, action string) error {
+	action = strings.TrimSpace(action)
+	if action != "start" && action != "stop" && action != "restart" {
+		return fmt.Errorf("invalid docker action: %s", action)
+	}
+	out, err := exec.CommandContext(ctx, "docker", action, containerName).CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if strings.Contains(text, "Cannot connect to the Docker daemon") {
+			return fmt.Errorf("%w: %s", ErrDockerUnavailable, text)
+		}
+		if text == "" {
+			text = err.Error()
+		}
+		return fmt.Errorf("docker %s failed: %s", action, text)
+	}
+	return nil
 }
 
 func slugify(input string) string {

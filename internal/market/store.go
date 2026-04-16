@@ -221,6 +221,23 @@ func normalizeAgent(agent Agent) Agent {
 	return agent
 }
 
+func agentEnabledChannelCount(agent Agent) int {
+	count := 0
+	if agent.WeixinChannel.Enabled {
+		count++
+	}
+	if agent.TelegramChannel.Enabled {
+		count++
+	}
+	if agent.DiscordChannel.Enabled {
+		count++
+	}
+	if agent.FeishuChannel.Enabled {
+		count++
+	}
+	return count
+}
+
 func (s *Store) load() error {
 	if _, err := os.Stat(s.path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -322,11 +339,7 @@ func (s *Store) Stats(userID int64) DashboardStats {
 			continue
 		}
 		stats.Agents++
-	}
-	for _, binding := range s.data.Bindings {
-		if binding.UserID == userID && binding.Status == "connected" {
-			stats.Connected++
-		}
+		stats.Connected += agentEnabledChannelCount(normalizeAgent(agent))
 	}
 	return stats
 }
@@ -354,6 +367,28 @@ func (s *Store) ListAccounts(userID int64) []AgentAccount {
 		return 0
 	})
 	return items
+}
+
+func (s *Store) FilterAccounts(userID int64, query string) []AgentAccount {
+	items := s.ListAccounts(userID)
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return items
+	}
+	filtered := make([]AgentAccount, 0, len(items))
+	for _, item := range items {
+		searchable := strings.ToLower(strings.Join([]string{
+			item.Name,
+			item.Provider,
+			item.Remark,
+			item.BaseURL,
+			item.APIType,
+		}, " "))
+		if strings.Contains(searchable, query) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func (s *Store) CreateAccount(userID int64, provider, name, apiKey, baseURL, apiType, remark string) (AgentAccount, error) {
@@ -505,6 +540,35 @@ func (s *Store) ListDashboardAgents(userID int64) []AgentDashboardItem {
 		return 0
 	})
 	return items
+}
+
+func (s *Store) FilterDashboardAgents(userID int64, query string) []AgentDashboardItem {
+	items := s.ListDashboardAgents(userID)
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return items
+	}
+	filtered := make([]AgentDashboardItem, 0, len(items))
+	for _, item := range items {
+		accountName := ""
+		if item.Account != nil {
+			accountName = item.Account.Name
+		}
+		searchable := strings.ToLower(strings.Join([]string{
+			item.Agent.Name,
+			item.Agent.Model,
+			item.Agent.AgentType,
+			item.Agent.DockerContainerName,
+			item.Agent.WebsitePrimaryDomain,
+			item.Agent.Remark,
+			accountName,
+			item.FallbackSummary,
+		}, " "))
+		if strings.Contains(searchable, query) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func (s *Store) GetAgentDetail(userID, agentID int64) (AgentDetail, error) {
@@ -707,6 +771,66 @@ func (s *Store) UpdateAgentWeixinChannel(userID, agentID int64, cfg WeixinChanne
 		cfg.EncodingAESKey = strings.TrimSpace(cfg.EncodingAESKey)
 		cfg.BoundChannel = strings.TrimSpace(cfg.BoundChannel)
 		s.data.Agents[i].WeixinChannel = cfg
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentTelegramChannel(userID, agentID int64, cfg TelegramChannelConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].TelegramChannel = TelegramChannelConfig{
+			Enabled:    cfg.Enabled,
+			BotToken:   strings.TrimSpace(cfg.BotToken),
+			BotName:    strings.TrimSpace(cfg.BotName),
+			WebhookURL: strings.TrimSpace(cfg.WebhookURL),
+			ChatID:     strings.TrimSpace(cfg.ChatID),
+		}
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentDiscordChannel(userID, agentID int64, cfg DiscordChannelConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].DiscordChannel = DiscordChannelConfig{
+			Enabled:     cfg.Enabled,
+			BotToken:    strings.TrimSpace(cfg.BotToken),
+			Application: strings.TrimSpace(cfg.Application),
+			GuildID:     strings.TrimSpace(cfg.GuildID),
+			WebhookURL:  strings.TrimSpace(cfg.WebhookURL),
+		}
+		s.data.Agents[i].UpdatedAt = time.Now()
+		return s.saveLocked()
+	}
+	return ErrOpenClawNotFound
+}
+
+func (s *Store) UpdateAgentFeishuChannel(userID, agentID int64, cfg FeishuChannelConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID != agentID || s.data.Agents[i].UserID != userID {
+			continue
+		}
+		s.data.Agents[i].FeishuChannel = FeishuChannelConfig{
+			Enabled:      cfg.Enabled,
+			AppID:        strings.TrimSpace(cfg.AppID),
+			AppSecret:    strings.TrimSpace(cfg.AppSecret),
+			EncryptKey:   strings.TrimSpace(cfg.EncryptKey),
+			Verification: strings.TrimSpace(cfg.Verification),
+		}
 		s.data.Agents[i].UpdatedAt = time.Now()
 		return s.saveLocked()
 	}

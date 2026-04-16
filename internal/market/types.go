@@ -101,47 +101,74 @@ type WeixinChannelConfig struct {
 	BoundChannel   string `json:"bound_channel"`
 }
 
+type TelegramChannelConfig struct {
+	Enabled    bool   `json:"enabled"`
+	BotToken   string `json:"bot_token"`
+	BotName    string `json:"bot_name"`
+	WebhookURL string `json:"webhook_url"`
+	ChatID     string `json:"chat_id"`
+}
+
+type DiscordChannelConfig struct {
+	Enabled     bool   `json:"enabled"`
+	BotToken    string `json:"bot_token"`
+	Application string `json:"application"`
+	GuildID     string `json:"guild_id"`
+	WebhookURL  string `json:"webhook_url"`
+}
+
+type FeishuChannelConfig struct {
+	Enabled      bool   `json:"enabled"`
+	AppID        string `json:"app_id"`
+	AppSecret    string `json:"app_secret"`
+	EncryptKey   string `json:"encrypt_key"`
+	Verification string `json:"verification"`
+}
+
 type Agent struct {
-	ID                   int64               `json:"id"`
-	UserID               int64               `json:"user_id"`
-	Name                 string              `json:"name"`
-	Remark               string              `json:"remark"`
-	AgentType            string              `json:"agent_type"`
-	Provider             string              `json:"provider"`
-	Model                string              `json:"model"`
-	APIType              string              `json:"api_type"`
-	MaxTokens            int                 `json:"max_tokens"`
-	ContextWindow        int                 `json:"context_window"`
-	BaseURL              string              `json:"base_url"`
-	APIKey               string              `json:"api_key"`
-	Token                string              `json:"token"`
-	Status               string              `json:"status"`
-	Message              string              `json:"message"`
-	AccountID            int64               `json:"account_id"`
-	ModelConfig          AgentModelConfig    `json:"model_config"`
-	SecurityConfig       AgentSecurityConfig `json:"security_config"`
-	OtherConfig          AgentOtherConfig    `json:"other_config"`
-	ConfigFile           AgentConfigFile     `json:"config_file"`
-	Skills               []AgentSkill        `json:"skills"`
-	Roles                []AgentRole         `json:"roles"`
-	WeixinChannel        WeixinChannelConfig `json:"weixin_channel"`
-	AppVersion           string              `json:"app_version"`
-	RestartPolicy        string              `json:"restart_policy"`
-	AllowPort            bool                `json:"allow_port"`
-	SpecifyIP            string              `json:"specify_ip"`
-	ConfigPath           string              `json:"config_path"`
-	WebUIPort            int                 `json:"web_ui_port"`
-	BridgePort           int                 `json:"bridge_port"`
-	AllowedOrigins       []string            `json:"allowed_origins"`
-	DockerContainerID    string              `json:"docker_container_id"`
-	DockerContainerName  string              `json:"docker_container_name"`
-	DockerImage          string              `json:"docker_image"`
-	DockerGatewayToken   string              `json:"docker_gateway_token"`
-	DockerConfigDir      string              `json:"docker_config_dir"`
-	DockerWorkspaceDir   string              `json:"docker_workspace_dir"`
-	WebsitePrimaryDomain string              `json:"website_primary_domain"`
-	CreatedAt            time.Time           `json:"created_at"`
-	UpdatedAt            time.Time           `json:"updated_at"`
+	ID                   int64                 `json:"id"`
+	UserID               int64                 `json:"user_id"`
+	Name                 string                `json:"name"`
+	Remark               string                `json:"remark"`
+	AgentType            string                `json:"agent_type"`
+	Provider             string                `json:"provider"`
+	Model                string                `json:"model"`
+	APIType              string                `json:"api_type"`
+	MaxTokens            int                   `json:"max_tokens"`
+	ContextWindow        int                   `json:"context_window"`
+	BaseURL              string                `json:"base_url"`
+	APIKey               string                `json:"api_key"`
+	Token                string                `json:"token"`
+	Status               string                `json:"status"`
+	Message              string                `json:"message"`
+	AccountID            int64                 `json:"account_id"`
+	ModelConfig          AgentModelConfig      `json:"model_config"`
+	SecurityConfig       AgentSecurityConfig   `json:"security_config"`
+	OtherConfig          AgentOtherConfig      `json:"other_config"`
+	ConfigFile           AgentConfigFile       `json:"config_file"`
+	Skills               []AgentSkill          `json:"skills"`
+	Roles                []AgentRole           `json:"roles"`
+	WeixinChannel        WeixinChannelConfig   `json:"weixin_channel"`
+	TelegramChannel      TelegramChannelConfig `json:"telegram_channel"`
+	DiscordChannel       DiscordChannelConfig  `json:"discord_channel"`
+	FeishuChannel        FeishuChannelConfig   `json:"feishu_channel"`
+	AppVersion           string                `json:"app_version"`
+	RestartPolicy        string                `json:"restart_policy"`
+	AllowPort            bool                  `json:"allow_port"`
+	SpecifyIP            string                `json:"specify_ip"`
+	ConfigPath           string                `json:"config_path"`
+	WebUIPort            int                   `json:"web_ui_port"`
+	BridgePort           int                   `json:"bridge_port"`
+	AllowedOrigins       []string              `json:"allowed_origins"`
+	DockerContainerID    string                `json:"docker_container_id"`
+	DockerContainerName  string                `json:"docker_container_name"`
+	DockerImage          string                `json:"docker_image"`
+	DockerGatewayToken   string                `json:"docker_gateway_token"`
+	DockerConfigDir      string                `json:"docker_config_dir"`
+	DockerWorkspaceDir   string                `json:"docker_workspace_dir"`
+	WebsitePrimaryDomain string                `json:"website_primary_domain"`
+	CreatedAt            time.Time             `json:"created_at"`
+	UpdatedAt            time.Time             `json:"updated_at"`
 }
 
 type ChannelBinding struct {
@@ -171,6 +198,22 @@ type DashboardStats struct {
 	Models    int
 	Agents    int
 	Connected int
+}
+
+type PageLink struct {
+	Number int
+	URL    string
+	Active bool
+}
+
+type PageInfo struct {
+	Page       int
+	PageSize   int
+	Total      int
+	TotalPages int
+	PrevURL    string
+	NextURL    string
+	Pages      []PageLink
 }
 
 type AgentDetail struct {
